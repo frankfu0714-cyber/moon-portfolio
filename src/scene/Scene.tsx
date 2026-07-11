@@ -25,8 +25,10 @@ export function Scene() {
         fov={55}
         near={0.1}
         far={800}
-        position={[0, 3.2, 6.5]}
+        position={[0, 3.2, -6.5]}
       />
+
+      <fog attach="fog" args={["#0a0d15", 40, 180]} />
 
       <Suspense fallback={null}>
         <Environment files="/hdri-space.hdr" background={false} />
@@ -37,6 +39,12 @@ export function Scene() {
         position={[30, 40, 10]}
         intensity={1.6}
         color="#fff5e0"
+        castShadow
+      />
+      <directionalLight
+        position={[-20, 12, -30]}
+        intensity={0.35}
+        color="#7fb3ff"
       />
       <ambientLight intensity={0.15} color="#8fa8d6" />
 

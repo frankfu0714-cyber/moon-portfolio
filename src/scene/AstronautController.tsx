@@ -27,8 +27,8 @@ export function AstronautController() {
   const velocity = useRef(new THREE.Vector3());
   const heading = useRef(0);
   const targetHeading = useRef(0);
-  const camPos = useRef(new THREE.Vector3(0, CAM_HEIGHT, CAM_DISTANCE));
-  const camTarget = useRef(new THREE.Vector3(0, 1.2, 0));
+  const camPos = useRef(new THREE.Vector3(0, CAM_HEIGHT, -CAM_DISTANCE));
+  const camTarget = useRef(new THREE.Vector3(0, 1.4, CAM_LOOK_AHEAD));
   const tmpVec = useRef(new THREE.Vector3());
   const tmpForward = useRef(new THREE.Vector3());
   const tmpDesired = useRef(new THREE.Vector3());
@@ -54,9 +54,9 @@ export function AstronautController() {
     tmpForward.current.y = 0;
     tmpForward.current.normalize();
     const right = tmpVec.current.set(
-      tmpForward.current.z,
+      -tmpForward.current.z,
       0,
-      -tmpForward.current.x,
+      tmpForward.current.x,
     );
 
     const desired = tmpDesired.current.set(0, 0, 0);
