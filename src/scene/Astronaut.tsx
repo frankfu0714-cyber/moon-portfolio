@@ -13,6 +13,7 @@ import * as THREE from "three";
 
 export type AstronautHandle = {
   group: THREE.Group | null;
+  tilt: THREE.Group | null;
 };
 
 type Props = {
@@ -20,8 +21,8 @@ type Props = {
 };
 
 const MODEL_URL = "/models/astronaut.glb";
-// Rig is standard Mixamo. Note: GLTFLoader strips the ':' from names,
-// so `mixamorig:Hips` in the GLB is exposed as `mixamorigHips`.
+// Rig is standard Mixamo. GLTFLoader strips the ':' from names, so
+// `mixamorig:Hips` in the raw GLB is exposed as `mixamorigHips`.
 const BONE = {
   hips: "mixamorigHips",
   spine: "mixamorigSpine",
@@ -34,9 +35,9 @@ const BONE = {
 
 const MODEL_SCALE = 1.0;
 
-// Rig ships in T-pose. Fold arms toward the body (A-pose baseline) each frame
-// so the character never sits with arms horizontal. Positive = arm swings down
-// along body in the local shoulder frame.
+// Fold arms down from the T-pose baked into the rig. Positive angle rotates
+// the arm bone around its local Z toward the body — matches the walk-swing
+// axis being local X.
 const ARM_DOWN_ANGLE = 1.2;
 
 useGLTF.preload(MODEL_URL);
@@ -46,6 +47,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   ref,
 ) {
   const groupRef = useRef<THREE.Group>(null);
+  const tiltGroup = useRef<THREE.Group>(null);
   const walkPhase = useRef(0);
   const lastFootstepStep = useRef(0);
   const stepPos = useRef(new THREE.Vector3());
@@ -107,11 +109,15 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     get group() {
       return groupRef.current;
     },
+    get tilt() {
+      return tiltGroup.current;
+    },
   }));
 
-  useFrame((_, delta) => {
+  useFrame((_, deltaRaw) => {
     const g = groupRef.current;
     if (!g) return;
+    const delta = Math.min(deltaRaw, 0.05);
 
     const speedSquared =
       (g.userData.speedSquared as number | undefined) ?? 0;
@@ -164,6 +170,8 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     }
 
     // Emit footstep at each half-cycle (walkPhase crossing multiples of PI).
+    // AstronautController grounds `g.position.y` to the terrain — pass the
+    // full world position so puffs settle on the surface, not at y=0.
     if (walkAmount > 0.15 && onFootstep) {
       const currentStep = Math.floor(walkPhase.current / Math.PI);
       if (currentStep !== lastFootstepStep.current) {
@@ -171,7 +179,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
         const side = currentStep % 2 === 0 ? 1 : -1;
         stepPos.current.set(
           g.position.x + Math.cos(g.rotation.y) * side * 0.18,
-          0,
+          g.position.y,
           g.position.z - Math.sin(g.rotation.y) * side * 0.18,
         );
         onFootstep(stepPos.current);
@@ -181,7 +189,9 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
 
   return (
     <group ref={groupRef} position={[0, 0, 0]}>
-      <primitive object={scene} scale={MODEL_SCALE} />
+      <group ref={tiltGroup}>
+        <primitive object={scene} scale={MODEL_SCALE} />
+      </group>
     </group>
   );
 });

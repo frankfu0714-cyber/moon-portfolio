@@ -10,7 +10,7 @@
     {
       "name": "moon-portfolio-prod",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["start"],
+      "runtimeArgs": ["run", "start"],
       "port": 3000
     }
   ]

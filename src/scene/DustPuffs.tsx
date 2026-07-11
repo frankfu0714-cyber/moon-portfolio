@@ -27,8 +27,8 @@ type Particle = {
 };
 
 export type DustPuffsHandle = {
-  puff: (x: number, z: number) => void;
-  ambient: (x: number, z: number) => void;
+  puff: (x: number, y: number, z: number) => void;
+  ambient: (x: number, y: number, z: number) => void;
 };
 
 function makeDustTexture() {
@@ -100,20 +100,18 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
     };
   }, [geometry, texture]);
 
-  const spawn = (x: number, z: number, burst: boolean) => {
+  const spawn = (x: number, y: number, z: number, burst: boolean) => {
     const count = burst ? 8 + Math.floor(Math.random() * 5) : 1;
     for (let n = 0; n < count; n++) {
       const idx = nextIndex.current;
       const p = particles[idx];
       p.active = true;
       p.age = 0;
-      // Small jitter around the foot.
       const jitterR = burst ? 0.12 : 0.08;
       const jTheta = Math.random() * Math.PI * 2;
       p.x = x + Math.cos(jTheta) * jitterR * Math.random();
       p.z = z + Math.sin(jTheta) * jitterR * Math.random();
-      p.y = 0.02 + Math.random() * 0.03;
-      // Outward + up velocity for bursts; a soft drift for ambient.
+      p.y = y + 0.02 + Math.random() * 0.03;
       const outward = burst ? 0.35 + Math.random() * 0.5 : 0.05;
       const upward = burst ? 0.35 + Math.random() * 0.5 : 0.12;
       p.vx = Math.cos(jTheta) * outward;
@@ -126,11 +124,11 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
   useImperativeHandle(
     ref,
     () => ({
-      puff(x, z) {
-        spawn(x, z, true);
+      puff(x, y, z) {
+        spawn(x, y, z, true);
       },
-      ambient(x, z) {
-        spawn(x, z, false);
+      ambient(x, y, z) {
+        spawn(x, y, z, false);
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -140,7 +138,6 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
   useFrame((_, delta) => {
     if (!pointsRef.current) return;
 
-    // Advance particles.
     for (let i = 0; i < CAPACITY; i++) {
       const p = particles[i];
       if (!p.active) {
@@ -157,22 +154,19 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
         positions[i * 3 + 1] = -1000;
         continue;
       }
-      // Ease-out on horizontal, gravity-lite on vertical.
       const drag = 1 - t * 0.85;
       p.x += p.vx * drag * delta;
       p.z += p.vz * drag * delta;
       p.y += p.vy * drag * delta;
-      p.vy -= 0.4 * delta; // gentle settle
+      p.vy -= 0.4 * delta;
 
       positions[i * 3] = p.x;
       positions[i * 3 + 1] = p.y;
       positions[i * 3 + 2] = p.z;
 
-      // Alpha: fade 0 -> 0.65 -> 0 over lifetime.
       const fadeIn = Math.min(t / 0.15, 1);
       const fadeOut = 1 - Math.max((t - 0.15) / 0.85, 0);
       alphas[i] = 0.65 * fadeIn * fadeOut;
-      // Size in world units: 0.03 -> 0.15.
       sizes[i] = 0.03 + t * 0.12;
     }
 
@@ -196,7 +190,6 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
               void main() {
                 vAlpha = aAlpha;
                 vec4 mv = modelViewMatrix * vec4(position, 1.0);
-                // aSize is in world units — scale to pixels by projection.
                 gl_PointSize = aSize * 380.0 / -mv.z;
                 gl_Position = projectionMatrix * mv;
               }

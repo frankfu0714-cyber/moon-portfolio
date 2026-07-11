@@ -2,20 +2,14 @@
 
 import { useProgress } from "@react-three/drei";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
 
 export function Loader() {
   const { progress, active } = useProgress();
-  const [visible, setVisible] = useState(true);
-
-  useEffect(() => {
-    if (!active && progress >= 100) {
-      const t = window.setTimeout(() => setVisible(false), 550);
-      return () => window.clearTimeout(t);
-    }
-  }, [active, progress]);
-
   const pct = Math.min(100, Math.round(progress));
+  // Hide once all trackable loads are done. active flips to false when the
+  // LoadingManager queue drains; progress >= 100 is a fallback in case a
+  // late-registered loader keeps active bouncing.
+  const visible = active && progress < 100;
 
   return (
     <AnimatePresence>
@@ -23,7 +17,7 @@ export function Loader() {
         <motion.div
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.6 }}
+          transition={{ duration: 0.55 }}
           className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#05060a] no-select"
         >
           <motion.div
@@ -45,9 +39,7 @@ export function Loader() {
           <div className="mt-8 text-xs uppercase tracking-[0.35em] opacity-70 font-mono">
             Landing on the moon
           </div>
-          <div className="mt-2 text-[11px] font-mono opacity-50">
-            {pct}%
-          </div>
+          <div className="mt-2 text-[11px] font-mono opacity-50">{pct}%</div>
         </motion.div>
       )}
     </AnimatePresence>
