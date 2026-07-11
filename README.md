@@ -45,7 +45,8 @@ public/
   hdri-space.hdr             Poly Haven "Dikhololo Night" 1k
   textures/moon/color.jpg    Solar System Scope 2k moon albedo
   textures/earth/color.jpg   Solar System Scope 2k earth daymap
-  models/cesium-man.glb      Khronos sample walking model (placeholder — see below)
+  models/astronaut.glb       "Rigged Astronaut" by J-Toastie via Poly Pizza (CC-BY 4.0)
+  models/cesium-man.glb      Khronos sample walking model (kept as rigged-model reference)
 ```
 
 ## Asset credits
@@ -55,21 +56,20 @@ public/
 | Space HDRI (Dikhololo Night) | [Poly Haven](https://polyhaven.com/a/dikhololo_night) | CC0 |
 | Moon 2k albedo | [Solar System Scope Textures](https://www.solarsystemscope.com/textures/) | CC-BY 4.0 |
 | Earth 2k daymap | [Solar System Scope Textures](https://www.solarsystemscope.com/textures/) | CC-BY 4.0 |
-| CesiumMan walking rig | [Khronos glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets) | CC-BY 4.0 |
-| Astronaut in scene | Stylized primitives + procedural walk cycle (this repo) | — |
+| CesiumMan walking rig (reference only, not shipped in-scene) | [Khronos glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets) | CC-BY 4.0 |
+| Astronaut in scene — "Rigged Astronaut" by J-Toastie via [Poly Pizza](https://poly.pizza/) | [poly.pizza](https://poly.pizza/) | CC-BY 4.0 |
 
 ## What's stubbed
 
 Everything renders and interacts, but a handful of things are best-effort placeholders
 that Frank should confirm or replace:
 
-- **Astronaut model.** The in-scene astronaut is built from primitive meshes with a
-  procedural leg/arm swing keyed to walk speed. Fits the "chill vibe" better than a
-  photorealistic download would, and skips asset-sourcing risk. To swap in a rigged
-  GLB (Quaternius astronaut + Mixamo walk, or Ready Player Me), drop it at
-  `public/models/astronaut.glb` and refactor `src/scene/Astronaut.tsx` to use
-  drei's `useGLTF` + `useAnimations` with the same `forwardRef` handle shape.
-  `cesium-man.glb` is left in `public/models/` as a reference for the rigged-model path.
+- **Astronaut model.** Ships as J-Toastie's "Rigged Astronaut" (Poly Pizza, CC-BY 4.0).
+  The GLB has no baked animation clip, so the walk cycle is driven procedurally by
+  rotating Mixamo-named bones (`mixamorig:LeftUpLeg`, `mixamorig:RightUpLeg`,
+  `mixamorig:LeftArm`, `mixamorig:RightArm`, `mixamorig:Spine`, `mixamorig:Head`,
+  `mixamorig:Hips`) in `useFrame`, keyed to walk speed. Idle adds a subtle
+  breathing bob on the hips and a slow head sway.
 - **Project links.** All twelve projects in `src/lib/projects.ts` point to `#`.
   Wire real URLs.
 - **Contact handles.** X, Threads, LinkedIn use best-guess handles/paths. GitHub is

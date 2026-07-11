@@ -34,6 +34,7 @@ export function AstronautController() {
   const velocity = useRef(new THREE.Vector3());
   const heading = useRef(0);
   const targetHeading = useRef(0);
+  const idleDustTimer = useRef(0);
   const camPos = useRef(new THREE.Vector3(0, CAM_HEIGHT, -CAM_DISTANCE));
   const camTarget = useRef(new THREE.Vector3(0, 1.4, CAM_LOOK_AHEAD));
   const tmpVec = useRef(new THREE.Vector3());
@@ -109,6 +110,21 @@ export function AstronautController() {
       velocity.current.x * velocity.current.x +
       velocity.current.z * velocity.current.z;
     astronaut.userData.speedSquared = speedSq;
+
+    // Idle ambient dust — subtle single particle every ~0.9s when stationary.
+    if (speedSq < 0.02) {
+      idleDustTimer.current += dt;
+      if (idleDustTimer.current > 0.9) {
+        idleDustTimer.current = 0;
+        dustRef.current?.ambient(
+          astronaut.position.x,
+          astronaut.position.y - FOOT_OFFSET,
+          astronaut.position.z,
+        );
+      }
+    } else {
+      idleDustTimer.current = 0;
+    }
 
     // Store moving state (batch to avoid re-renders every frame).
     const moving = speedSq > 0.02;
