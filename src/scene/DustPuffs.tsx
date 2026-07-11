@@ -11,11 +11,12 @@ type Puff = {
   active: boolean;
   age: number;
   x: number;
+  y: number;
   z: number;
 };
 
 export type DustPuffsHandle = {
-  puff: (x: number, z: number) => void;
+  puff: (x: number, y: number, z: number) => void;
 };
 
 export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) {
@@ -28,6 +29,7 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
         active: false,
         age: 0,
         x: 0,
+        y: 0,
         z: 0,
       })),
     [],
@@ -39,11 +41,12 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
   useImperativeHandle(
     ref,
     () => ({
-      puff(x: number, z: number) {
+      puff(x: number, y: number, z: number) {
         const p = puffs[nextIndex.current];
         p.active = true;
         p.age = 0;
         p.x = x + (Math.random() - 0.5) * 0.2;
+        p.y = y;
         p.z = z + (Math.random() - 0.5) * 0.2;
         nextIndex.current = (nextIndex.current + 1) % MAX_PUFFS;
       },
@@ -75,7 +78,7 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
       }
       const t = p.age / LIFETIME;
       const scale = 0.15 + t * 0.55;
-      const y = 0.05 + t * 0.35;
+      const y = p.y + 0.05 + t * 0.35;
       dummy.position.set(p.x, y, p.z);
       dummy.scale.setScalar(scale);
       dummy.updateMatrix();

@@ -7,11 +7,18 @@ import { Astronaut, type AstronautHandle } from "./Astronaut";
 import { DustPuffs, type DustPuffsHandle } from "./DustPuffs";
 import { useSceneStore } from "@/lib/store";
 import { WAYPOINTS, type WaypointId } from "@/lib/waypoints";
+import { sampleSlope, sampleTerrainHeight } from "@/lib/terrain";
 
 const MAX_SPEED = 1.2; // units/sec — chill vibe
 const ACCEL = 4;
 const DAMP = 6;
 const TURN_LERP = 6;
+
+// Terrain-following.
+const FOOT_OFFSET = 0.02;
+const HEIGHT_LERP = 0.15; // per-frame low-pass; kills crater-rim jitter
+const MAX_PITCH = 0.17; // ~10°
+const PITCH_LERP = 0.12;
 
 // Camera constants
 const CAM_HEIGHT = 3.2;
@@ -90,6 +97,13 @@ export function AstronautController() {
     astronaut.position.x += velocity.current.x * dt;
     astronaut.position.z += velocity.current.z * dt;
 
+    // Sample the surface and low-pass toward it so the astronaut tracks
+    // crater rims and dunes without jitter on high-frequency vertices.
+    const targetY =
+      sampleTerrainHeight(astronaut.position.x, astronaut.position.z) +
+      FOOT_OFFSET;
+    astronaut.position.y += (targetY - astronaut.position.y) * HEIGHT_LERP;
+
     // Report speed to the astronaut mesh for animation blending.
     const speedSq =
       velocity.current.x * velocity.current.x +
@@ -116,6 +130,26 @@ export function AstronautController() {
       dt,
     );
     astronaut.rotation.y = heading.current;
+
+    // Body pitch/roll — approximate slope in the local forward/right axes
+    // and apply it to the tilt group (inside the heading rotation) so it
+    // reads as terrain adaptation rather than world-axis wobble.
+    const tilt = astronautRef.current?.tilt;
+    if (tilt) {
+      const { dx, dz } = sampleSlope(
+        astronaut.position.x,
+        astronaut.position.z,
+        0.5,
+      );
+      const forwardWorldX = Math.sin(heading.current);
+      const forwardWorldZ = Math.cos(heading.current);
+      const slopeForward = dx * forwardWorldX + dz * forwardWorldZ;
+      const slopeRight = dx * forwardWorldZ - dz * forwardWorldX;
+      const targetPitch = THREE.MathUtils.clamp(-slopeForward, -MAX_PITCH, MAX_PITCH);
+      const targetRoll = THREE.MathUtils.clamp(-slopeRight * 0.5, -MAX_PITCH, MAX_PITCH);
+      tilt.rotation.x += (targetPitch - tilt.rotation.x) * PITCH_LERP;
+      tilt.rotation.z += (targetRoll - tilt.rotation.z) * PITCH_LERP;
+    }
 
     // Proximity check for waypoints.
     let nearest: WaypointId | null = null;
@@ -148,7 +182,7 @@ export function AstronautController() {
     );
     camPos.current.y = THREE.MathUtils.damp(
       camPos.current.y,
-      CAM_HEIGHT,
+      CAM_HEIGHT + astronaut.position.y,
       CAM_LERP_POS,
       dt,
     );
@@ -171,7 +205,7 @@ export function AstronautController() {
     );
     camTarget.current.y = THREE.MathUtils.damp(
       camTarget.current.y,
-      1.4,
+      1.4 + astronaut.position.y,
       CAM_LERP_TARGET,
       dt,
     );
@@ -181,7 +215,7 @@ export function AstronautController() {
   });
 
   const handleFootstep = (pos: THREE.Vector3) => {
-    dustRef.current?.puff(pos.x, pos.z);
+    dustRef.current?.puff(pos.x, pos.y - FOOT_OFFSET, pos.z);
   };
 
   return (
