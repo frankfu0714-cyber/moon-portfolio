@@ -1,14 +1,33 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
+import { SafeAsset } from "./SafeAsset";
+
+function EarthTextureApplier({
+  materialRef,
+}: {
+  materialRef: React.RefObject<THREE.MeshStandardMaterial | null>;
+}) {
+  const earthMap = useTexture("/textures/earth/color.jpg");
+
+  useEffect(() => {
+    const mat = materialRef.current;
+    if (mat) {
+      mat.map = earthMap;
+      mat.needsUpdate = true;
+    }
+  }, [earthMap, materialRef]);
+
+  return null;
+}
 
 export function EarthInSky() {
   const groupRef = useRef<THREE.Group>(null);
   const glowRef = useRef<THREE.Mesh>(null);
-  const earthMap = useTexture("/textures/earth/color.jpg");
+  const materialRef = useRef<THREE.MeshStandardMaterial>(null);
 
   useFrame((_, delta) => {
     if (groupRef.current) {
@@ -26,14 +45,18 @@ export function EarthInSky() {
         <mesh castShadow={false} receiveShadow={false}>
           <sphereGeometry args={[7, 48, 48]} />
           <meshStandardMaterial
-            map={earthMap}
+            ref={materialRef}
+            color="#4a7ba8"
             emissive="#0a1a2a"
-            emissiveIntensity={0.35}
+            emissiveIntensity={0.45}
             roughness={0.85}
             metalness={0}
           />
         </mesh>
       </group>
+      <SafeAsset label="earth-texture">
+        <EarthTextureApplier materialRef={materialRef} />
+      </SafeAsset>
       <mesh ref={glowRef}>
         <sphereGeometry args={[7.6, 32, 32]} />
         <meshBasicMaterial
