@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
+import { SafeAsset } from "./SafeAsset";
 
 const RADIUS = 240;
 const SEGMENTS = 220;
@@ -45,17 +46,14 @@ function fbm(x: number, y: number) {
   return sum / norm;
 }
 
-// Places pseudo-random craters at fixed seeds so bakes are deterministic.
 const CRATERS: { x: number; z: number; r: number; depth: number }[] = (() => {
   const arr: { x: number; z: number; r: number; depth: number }[] = [];
   for (let i = 0; i < 42; i++) {
     const a = (i * 137.508) % (Math.PI * 2);
     const rad = 6 + ((i * 17) % 220);
-    // Skip anywhere too close to spawn / waypoints for gameplay.
     const cx = Math.cos(a) * rad;
     const cz = Math.sin(a) * rad;
     if (Math.hypot(cx, cz) < 5) continue;
-    // Skip any within 4 units of the three waypoints.
     const waypoints: [number, number][] = [
       [12, -6],
       [-4, -18],
@@ -81,17 +79,14 @@ const CRATERS: { x: number; z: number; r: number; depth: number }[] = (() => {
 
 function heightAt(x: number, z: number) {
   const d = Math.hypot(x, z);
-  // Rolling terrain, bigger amplitude farther from the walkable area.
   const nearBias = THREE.MathUtils.smoothstep(d, WALKABLE_R * 0.5, WALKABLE_R * 1.8);
   const base = (fbm(x * 0.03, z * 0.03) - 0.5) * 2.5;
   const detail = (fbm(x * 0.12, z * 0.12) - 0.5) * 0.5;
   let h = base * nearBias + detail * 0.6;
 
-  // Central plateau near spawn stays mostly flat so the walk feels grounded.
   const flatFalloff = THREE.MathUtils.smoothstep(d, 3, WALKABLE_R * 0.7);
   h *= 0.15 + 0.85 * flatFalloff;
 
-  // Craters — quadratic bowl with a lifted rim.
   for (const c of CRATERS) {
     const cd = Math.hypot(x - c.x, z - c.z);
     if (cd < c.r * 1.4) {
@@ -99,7 +94,6 @@ function heightAt(x: number, z: number) {
       if (t < 1) {
         h -= (1 - t * t) * c.depth;
       } else {
-        // Rim lift
         const rt = (t - 1) / 0.4;
         h += (1 - rt) * (1 - rt) * c.depth * 0.35;
       }
@@ -109,8 +103,36 @@ function heightAt(x: number, z: number) {
   return h;
 }
 
+// Applies the moon color texture to the shared material ref. Isolated so a
+// texture load failure (e.g. Vercel SSO redirect returning HTML instead of
+// JPG) can be caught by SafeAsset without collapsing the whole moon mesh.
+function MoonTextureApplier({
+  materialRef,
+}: {
+  materialRef: React.RefObject<THREE.MeshStandardMaterial | null>;
+}) {
+  const colorMap = useTexture("/textures/moon/color.jpg", (loaded) => {
+    const tex = loaded as THREE.Texture;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(28, 28);
+    tex.anisotropy = 8;
+    tex.needsUpdate = true;
+  });
+
+  useEffect(() => {
+    const mat = materialRef.current;
+    if (mat) {
+      mat.map = colorMap;
+      mat.needsUpdate = true;
+    }
+  }, [colorMap, materialRef]);
+
+  return null;
+}
+
 export function MoonSurface() {
-  const colorMap = useTexture("/textures/moon/color.jpg");
+  const materialRef = useRef<THREE.MeshStandardMaterial>(null);
 
   const geometry = useMemo(() => {
     const geom = new THREE.PlaneGeometry(RADIUS * 2, RADIUS * 2, SEGMENTS, SEGMENTS);
@@ -126,21 +148,6 @@ export function MoonSurface() {
     return geom;
   }, []);
 
-  useEffect(() => {
-    // The three.js Texture API is imperative — drei's useTexture returns a
-    // mutable Texture, but the React Compiler flags hook returns as
-    // frozen. This is a well-known pattern in R3F; suppress the check.
-    /* eslint-disable react-hooks/immutability */
-    colorMap.wrapS = THREE.RepeatWrapping;
-    colorMap.wrapT = THREE.RepeatWrapping;
-    colorMap.repeat.set(28, 28);
-    colorMap.anisotropy = 8;
-    colorMap.needsUpdate = true;
-    /* eslint-enable react-hooks/immutability */
-  }, [colorMap]);
-
-  // Mid-distance scatter of small mounds/boulders so the ground has depth
-  // without walling off the sky.
   const scatter = useMemo(() => {
     const items: { pos: [number, number, number]; scale: number; rot: number }[] = [];
     for (let i = 0; i < 60; i++) {
@@ -148,7 +155,6 @@ export function MoonSurface() {
       const r = 25 + fbm(i * 2, i) * 60;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
-      // Skip anything that would clip a waypoint.
       const waypoints: [number, number][] = [
         [12, -6],
         [-4, -18],
@@ -176,12 +182,15 @@ export function MoonSurface() {
     <>
       <mesh geometry={geometry} receiveShadow>
         <meshStandardMaterial
-          map={colorMap}
-          color="#b8b2a4"
+          ref={materialRef}
+          color="#8f8878"
           roughness={0.98}
           metalness={0}
         />
       </mesh>
+      <SafeAsset label="moon-texture">
+        <MoonTextureApplier materialRef={materialRef} />
+      </SafeAsset>
       {scatter.map((s, i) => (
         <mesh key={i} position={s.pos} rotation={[0, s.rot, 0]}>
           <dodecahedronGeometry args={[s.scale, 0]} />
