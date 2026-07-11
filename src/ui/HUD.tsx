@@ -74,6 +74,19 @@ export function HUD() {
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 sm:hidden">
         <AnimatePresence>{!activePanel && <DPad />}</AnimatePresence>
       </div>
+
+      {/* Asset credit pill — bottom right */}
+      <div className="fixed bottom-3 right-3 z-30 no-select">
+        <a
+          href="https://poly.pizza/m/d25085f1-dac6-462e-92b6-752c5af534bd"
+          target="_blank"
+          rel="noopener noreferrer"
+          title={'"Rigged Astronaut" by J-Toastie via Poly Pizza (CC BY 4.0)'}
+          className="block text-[10px] tracking-wide opacity-40 hover:opacity-80 transition-opacity rounded-full border border-white/15 px-2 py-1 bg-black/25 backdrop-blur-sm"
+        >
+          astronaut: J-Toastie · Poly Pizza · CC-BY
+        </a>
+      </div>
     </>
   );
 }

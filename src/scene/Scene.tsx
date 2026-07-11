@@ -58,7 +58,9 @@ export function Scene() {
         <WaypointFlag key={w.id} waypoint={w} />
       ))}
 
-      <AstronautController />
+      <Suspense fallback={null}>
+        <AstronautController />
+      </Suspense>
 
       <EffectComposer multisampling={0} enableNormalPass={false}>
         <Bloom
