@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { SafeAsset } from "./SafeAsset";
-import { fbm, sampleTerrainHeight } from "@/lib/terrain";
+import { sampleTerrainHeight } from "@/lib/terrain";
+import { RockField } from "./RockField";
 
 const RADIUS = 240;
 const SEGMENTS = 220;
@@ -54,36 +55,6 @@ export function MoonSurface() {
     return geom;
   }, []);
 
-  const scatter = useMemo(() => {
-    const items: { pos: [number, number, number]; scale: number; rot: number }[] = [];
-    for (let i = 0; i < 60; i++) {
-      const a = i * 0.42 + fbm(i, i + 5) * 0.5;
-      const r = 25 + fbm(i * 2, i) * 60;
-      const x = Math.cos(a) * r;
-      const z = Math.sin(a) * r;
-      const waypoints: [number, number][] = [
-        [12, -6],
-        [-4, -18],
-        [-16, 4],
-      ];
-      let ok = true;
-      for (const [wx, wz] of waypoints) {
-        if (Math.hypot(x - wx, z - wz) < 5) {
-          ok = false;
-          break;
-        }
-      }
-      if (!ok) continue;
-      const y = sampleTerrainHeight(x, z);
-      items.push({
-        pos: [x, y + 0.25, z],
-        scale: 0.6 + fbm(i + 7, i + 11) * 1.6,
-        rot: fbm(i + 1, i * 3) * Math.PI * 2,
-      });
-    }
-    return items;
-  }, []);
-
   return (
     <>
       <mesh geometry={geometry} receiveShadow>
@@ -97,12 +68,7 @@ export function MoonSurface() {
       <SafeAsset label="moon-texture">
         <MoonTextureApplier materialRef={materialRef} />
       </SafeAsset>
-      {scatter.map((s, i) => (
-        <mesh key={i} position={s.pos} rotation={[0, s.rot, 0]}>
-          <dodecahedronGeometry args={[s.scale, 0]} />
-          <meshStandardMaterial color="#807a6d" roughness={1} flatShading />
-        </mesh>
-      ))}
+      <RockField />
     </>
   );
 }
