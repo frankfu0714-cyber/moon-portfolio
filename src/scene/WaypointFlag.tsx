@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/store";
 import type { Waypoint } from "@/lib/waypoints";
+import { sampleTerrainHeight } from "@/lib/terrain";
 
 type Props = {
   waypoint: Waypoint;
@@ -37,10 +38,11 @@ export function WaypointFlag({ waypoint }: Props) {
     }
   });
 
-  const [x, y, z] = waypoint.position;
+  const [x, , z] = waypoint.position;
+  const groundY = useMemo(() => sampleTerrainHeight(x, z), [x, z]);
 
   return (
-    <group position={[x, y, z]}>
+    <group position={[x, groundY, z]}>
       {/* Ground glow ring */}
       <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
         <ringGeometry args={[waypoint.proximityRadius - 0.2, waypoint.proximityRadius, 48]} />
