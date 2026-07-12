@@ -45,7 +45,7 @@ public/
   hdri-space.hdr             Poly Haven "Dikhololo Night" 1k
   textures/moon/color.jpg    Solar System Scope 2k moon albedo
   textures/earth/color.jpg   Solar System Scope 2k earth daymap
-  models/astronaut.glb       "Rigged Astronaut" by J-Toastie via Poly Pizza (CC-BY 4.0)
+  models/astronaut.glb       "Astronaut A" by Quaternius via Poly Pizza (CC0)
   models/cesium-man.glb      Khronos sample walking model (kept as rigged-model reference)
 ```
 
@@ -57,19 +57,19 @@ public/
 | Moon 2k albedo | [Solar System Scope Textures](https://www.solarsystemscope.com/textures/) | CC-BY 4.0 |
 | Earth 2k daymap | [Solar System Scope Textures](https://www.solarsystemscope.com/textures/) | CC-BY 4.0 |
 | CesiumMan walking rig (reference only, not shipped in-scene) | [Khronos glTF Sample Assets](https://github.com/KhronosGroup/glTF-Sample-Assets) | CC-BY 4.0 |
-| Astronaut in scene — "Rigged Astronaut" by J-Toastie via [Poly Pizza](https://poly.pizza/) | [poly.pizza](https://poly.pizza/) | CC-BY 4.0 |
+| Astronaut in scene — "Astronaut A" by Quaternius via [Poly Pizza](https://poly.pizza/) | [poly.pizza](https://poly.pizza/) | CC0 |
 
 ## What's stubbed
 
 Everything renders and interacts, but a handful of things are best-effort placeholders
 that Frank should confirm or replace:
 
-- **Astronaut model.** Ships as J-Toastie's "Rigged Astronaut" (Poly Pizza, CC-BY 4.0).
-  The GLB has no baked animation clip, so the walk cycle is driven procedurally by
-  rotating Mixamo-named bones (`mixamorig:LeftUpLeg`, `mixamorig:RightUpLeg`,
-  `mixamorig:LeftArm`, `mixamorig:RightArm`, `mixamorig:Spine`, `mixamorig:Head`,
-  `mixamorig:Hips`) in `useFrame`, keyed to walk speed. Idle adds a subtle
-  breathing bob on the hips and a slow head sway.
+- **Astronaut model.** Ships as Quaternius' "Astronaut A" (Poly Pizza, CC0). The
+  GLB ships with 24 pre-baked animation clips; the scene plays
+  `CharacterArmature|Idle`, `CharacterArmature|Walk`, and `CharacterArmature|Run`
+  via `useAnimations`, crossfading (150 ms) between them based on move speed and
+  Shift-run state. No hand-rolled bone math — the animator's polish carries the
+  motion.
 - **Project links.** All twelve projects in `src/lib/projects.ts` point to `#`.
   Wire real URLs.
 - **Contact handles.** X, Threads, LinkedIn use best-guess handles/paths. GitHub is
