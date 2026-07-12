@@ -5,6 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { Astronaut, type AstronautHandle } from "./Astronaut";
 import { DustPuffs, type DustPuffsHandle } from "./DustPuffs";
+import { SafeAsset } from "./SafeAsset";
 import { useSceneStore } from "@/lib/store";
 import { WAYPOINTS, type WaypointId } from "@/lib/waypoints";
 import { sampleSlope, sampleTerrainHeight } from "@/lib/terrain";
@@ -236,7 +237,14 @@ export function AstronautController() {
 
   return (
     <>
-      <Astronaut ref={astronautRef} onFootstep={handleFootstep} />
+      {/* Wrap the rigged-GLB astronaut in SafeAsset. If the GLB fetch fails
+          (Vercel SSO redirect returning HTML, CORS, 404, malformed model),
+          useGLTF throws — without a boundary that error unmounts the entire
+          Canvas subtree and the whole scene goes black. The controller's
+          useFrame keeps running with a null ref and simply no-ops. */}
+      <SafeAsset label="astronaut">
+        <Astronaut ref={astronautRef} onFootstep={handleFootstep} />
+      </SafeAsset>
       <DustPuffs ref={dustRef} />
     </>
   );

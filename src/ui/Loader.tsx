@@ -1,15 +1,32 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useProgress } from "@react-three/drei";
 import { AnimatePresence, motion } from "motion/react";
 
+// Max wait before the loader dismisses regardless of `useProgress`. drei's
+// `useProgress` can hang at <100% forever if the LoadingManager sees an
+// error (e.g. SafeAsset swallowed a texture failure) or a late-registered
+// loader keeps `active` bouncing. That leaves the fullscreen overlay
+// covering a perfectly-rendered scene — dead-black on production. This
+// timeout guarantees the scene becomes visible.
+const MAX_LOADER_MS = 4000;
+
 export function Loader() {
   const { progress, active } = useProgress();
+  const [timedOut, setTimedOut] = useState(false);
   const pct = Math.min(100, Math.round(progress));
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setTimedOut(true), MAX_LOADER_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+
   // Hide once all trackable loads are done. active flips to false when the
   // LoadingManager queue drains; progress >= 100 is a fallback in case a
-  // late-registered loader keeps active bouncing.
-  const visible = active && progress < 100;
+  // late-registered loader keeps active bouncing; timedOut is the last-
+  // resort guarantee that the scene isn't hidden forever.
+  const visible = !timedOut && active && progress < 100;
 
   return (
     <AnimatePresence>
