@@ -98,15 +98,21 @@ export function Scene() {
 
       <FrameLoopHeartbeat />
 
-      <EffectComposer multisampling={0} enableNormalPass={false}>
-        <Bloom
-          intensity={0.7}
-          luminanceThreshold={0.55}
-          luminanceSmoothing={0.25}
-          mipmapBlur
-        />
-        <Vignette eskil={false} offset={0.15} darkness={0.7} />
-      </EffectComposer>
+      {/* Post-processing is a nice-to-have — if the composer fails to
+          initialize on a given driver / browser, we still want the raw scene
+          to render rather than a black canvas. SafeAsset lets R3F fall back
+          to its default render loop when EffectComposer errors. */}
+      <SafeAsset label="post">
+        <EffectComposer multisampling={0} enableNormalPass={false}>
+          <Bloom
+            intensity={0.7}
+            luminanceThreshold={0.55}
+            luminanceSmoothing={0.25}
+            mipmapBlur
+          />
+          <Vignette eskil={false} offset={0.15} darkness={0.7} />
+        </EffectComposer>
+      </SafeAsset>
     </Canvas>
   );
 }
