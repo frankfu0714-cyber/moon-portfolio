@@ -4,6 +4,7 @@ import type { WaypointId } from "./waypoints";
 export type WalkInput = {
   forward: number; // -1..1
   strafe: number; // -1..1
+  running: boolean; // shift-modifier — bumps the speed cap for a jog
 };
 
 type State = {
@@ -30,7 +31,7 @@ export const useSceneStore = create<State & Actions>((set) => ({
   muted: true,
   activePanel: null,
   nearWaypoint: null,
-  walkInput: { forward: 0, strafe: 0 },
+  walkInput: { forward: 0, strafe: 0, running: false },
   moving: false,
   setReady: (ready) => set({ ready }),
   toggleMute: () => set((s) => ({ muted: !s.muted })),

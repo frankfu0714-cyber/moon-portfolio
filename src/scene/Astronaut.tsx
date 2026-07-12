@@ -59,6 +59,10 @@ const FOOT_FOLLOW = 0.3;
 // How fast the walk pose fades in/out as speed crosses the moving threshold.
 // Full blend in ~0.25s so idle→walk isn't a snap.
 const WALK_BLEND_LERP = 8;
+// Speed cap targets — must stay in sync with AstronautController's
+// WALK_SPEED / RUN_SPEED so the walk-amount envelope hits 1.0 at each cap.
+const WALK_SPEED_CAP = 1.2;
+const RUN_SPEED_CAP = 2.6;
 
 useGLTF.preload(MODEL_URL);
 
@@ -158,29 +162,48 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     const speedSquared =
       (g.userData.speedSquared as number | undefined) ?? 0;
     const speed = Math.sqrt(speedSquared);
+    // AstronautController owns runBlend (smoothed shift-key envelope). Use
+    // it here to scale the animation as well as the "what does full-speed
+    // mean" envelope. At runBlend=1, the effective cap is RUN_SPEED_CAP so
+    // walkAmount still hits 1.0 at max jog speed.
+    const runBlend = (g.userData.runBlend as number | undefined) ?? 0;
+    const effectiveCap =
+      WALK_SPEED_CAP + (RUN_SPEED_CAP - WALK_SPEED_CAP) * runBlend;
     // Instantaneous walk envelope from speed, then smoothly lerp into the
     // persistent walkBlend so idle→walk (and walk→idle) doesn't snap. All
     // walk-cycle rotations are scaled by walkBlend, so at rest the pose is
     // exactly the bind pose (arms down, legs straight).
-    const speedEnv = Math.min(speed / 1.2, 1);
+    const speedEnv = Math.min(speed / effectiveCap, 1);
     walkBlend.current +=
       (speedEnv - walkBlend.current) * Math.min(1, WALK_BLEND_LERP * delta);
     const walkAmount = walkBlend.current;
-    const cycleSpeed = walkAmount * Math.PI * 2 * 1.8;
+
+    // Cycle frequency: 1.8 Hz walking → 3.06 Hz jogging (1.7×). Amplitude
+    // multiplier: 1× walking → 1.5× jogging on both hips and shoulders.
+    // Arm-to-leg ratio bumps 0.65 → 0.85 so arms pump more aggressively.
+    const cycleMul = 1 + runBlend * 0.7;
+    const swingMul = 1 + runBlend * 0.5;
+    const armRatio = 0.65 + runBlend * 0.20;
+    const cycleSpeed = walkAmount * Math.PI * 2 * 1.8 * cycleMul;
     walkPhase.current += cycleSpeed * delta;
 
     const phase = walkPhase.current;
-    const legSwing = Math.sin(phase) * 0.75 * walkAmount;
-    // Arms swing at 65% of leg amplitude, phase-locked opposite the same-side
-    // leg (left-arm-with-right-leg looks natural). Left leg uses +sin(phase)
-    // so left arm uses +sin(phase - PI) = -sin(phase).
-    const armSwing = Math.sin(phase) * 0.75 * 0.65 * walkAmount;
+    const legSwing = Math.sin(phase) * 0.75 * walkAmount * swingMul;
+    // Arms phase-locked opposite the same-side leg (left arm with right
+    // leg is what the human eye reads as natural).
+    const armSwing = Math.sin(phase) * 0.75 * armRatio * walkAmount * swingMul;
     // Knee bend only fires during the leg's swing phase (foot lifted). Cap
     // at 0 so we never hyperextend the knee during the stance phase.
     const leftKneeBend =
-      -Math.max(0, Math.sin(phase + Math.PI / 2)) * KNEE_BEND_ANGLE * walkAmount;
+      -Math.max(0, Math.sin(phase + Math.PI / 2)) *
+      KNEE_BEND_ANGLE *
+      walkAmount *
+      swingMul;
     const rightKneeBend =
-      -Math.max(0, Math.sin(phase - Math.PI / 2)) * KNEE_BEND_ANGLE * walkAmount;
+      -Math.max(0, Math.sin(phase - Math.PI / 2)) *
+      KNEE_BEND_ANGLE *
+      walkAmount *
+      swingMul;
     const doubleBob = Math.abs(Math.sin(phase * 2)) * walkAmount;
 
     if (bones.leftUpLeg) {
@@ -223,7 +246,8 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     if (bones.spine) {
       // Side-to-side sway around Z reads as counter-rotation of the shoulders
       // vs the hips — the classic "walk shimmy". Amplitude stays subtle.
-      bones.spine.rotation.z = rest.spine.z + Math.sin(phase) * 0.04 * walkAmount;
+      bones.spine.rotation.z =
+        rest.spine.z + Math.sin(phase) * 0.04 * walkAmount * swingMul;
     }
     if (bones.head) {
       bones.head.rotation.x =
@@ -232,12 +256,14 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
 
     // Root bob + idle breathing on the hips. During walk, subtract a
     // vertical bob so the hips dip on double-step (both feet on ground) —
-    // matches doubleBob's 2× frequency naturally.
+    // matches doubleBob's 2× frequency naturally. Running deepens the dip
+    // from ~5cm to ~10cm as runBlend rises.
     if (bones.hips) {
       const idleT = performance.now() * 0.001;
       const idleWobble =
         walkAmount < 0.1 ? Math.sin(idleT * 1.6) * 0.02 : 0;
-      const walkBob = -doubleBob * 0.05;
+      const bobDepth = 0.05 + runBlend * 0.05;
+      const walkBob = -doubleBob * bobDepth;
       bones.hips.position.y = rest.hips.py + idleWobble + walkBob;
     }
     if (bones.head && walkAmount < 0.1) {

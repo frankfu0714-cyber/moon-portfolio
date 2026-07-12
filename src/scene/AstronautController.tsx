@@ -10,7 +10,12 @@ import { useSceneStore } from "@/lib/store";
 import { WAYPOINTS, type WaypointId } from "@/lib/waypoints";
 import { sampleSlope, sampleTerrainHeight } from "@/lib/terrain";
 
-const MAX_SPEED = 1.2; // units/sec — chill vibe
+const WALK_SPEED = 1.2; // units/sec — chill vibe
+const RUN_SPEED = 2.6; // units/sec — "run slowly" jog
+// How fast the speed cap slews between walk and run when Shift toggles.
+// ~150ms feel: `dampAngle`-style lerp at ~6.6/s gets us to ~63% in a frame
+// at that time constant. Applied via THREE.MathUtils.damp on speedCap.
+const SPEED_CAP_LAMBDA = 6.6;
 const ACCEL = 4;
 const DAMP = 6;
 const TURN_LERP = 6;
@@ -27,6 +32,10 @@ const CAM_DISTANCE = 6.5;
 const CAM_LOOK_AHEAD = 1.5;
 const CAM_LERP_POS = 3.5;
 const CAM_LERP_TARGET = 5;
+// When running, damping constants shrink so the camera lags further
+// behind the astronaut — reads as momentum rather than jerk.
+const CAM_LERP_POS_RUN = 2.2;
+const CAM_LERP_TARGET_RUN = 3.4;
 
 export function AstronautController() {
   const astronautRef = useRef<AstronautHandle>(null);
@@ -36,6 +45,8 @@ export function AstronautController() {
   const heading = useRef(0);
   const targetHeading = useRef(0);
   const idleDustTimer = useRef(0);
+  const speedCap = useRef(WALK_SPEED);
+  const runBlend = useRef(0); // 0 = walk, 1 = run — smooths camera + anim
   const camPos = useRef(new THREE.Vector3(0, CAM_HEIGHT, -CAM_DISTANCE));
   const camTarget = useRef(new THREE.Vector3(0, 1.4, CAM_LOOK_AHEAD));
   const tmpVec = useRef(new THREE.Vector3());
@@ -58,6 +69,24 @@ export function AstronautController() {
     const { walkInput, activePanel } = useSceneStore.getState();
     const inputActive = !activePanel;
 
+    // Slew the speed cap (and runBlend) toward the target so entering/
+    // exiting run doesn't snap the velocity or the animation amplitude.
+    // ~150ms transition matches SPEED_CAP_LAMBDA.
+    const wantsRun = inputActive && walkInput.running;
+    const targetCap = wantsRun ? RUN_SPEED : WALK_SPEED;
+    speedCap.current = THREE.MathUtils.damp(
+      speedCap.current,
+      targetCap,
+      SPEED_CAP_LAMBDA,
+      dt,
+    );
+    runBlend.current = THREE.MathUtils.damp(
+      runBlend.current,
+      wantsRun ? 1 : 0,
+      SPEED_CAP_LAMBDA,
+      dt,
+    );
+
     // Compute desired movement direction in world space, camera-relative.
     tmpForward.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
     tmpForward.current.y = 0;
@@ -75,7 +104,7 @@ export function AstronautController() {
         .addScaledVector(right, walkInput.strafe);
       if (desired.lengthSq() > 1) desired.normalize();
     }
-    desired.multiplyScalar(MAX_SPEED);
+    desired.multiplyScalar(speedCap.current);
 
     // Damped velocity toward desired.
     velocity.current.x = THREE.MathUtils.damp(
@@ -111,6 +140,8 @@ export function AstronautController() {
       velocity.current.x * velocity.current.x +
       velocity.current.z * velocity.current.z;
     astronaut.userData.speedSquared = speedSq;
+    // Pass the run envelope so the walk cycle can pump faster / bigger.
+    astronaut.userData.runBlend = runBlend.current;
 
     // Idle ambient dust — subtle single particle every ~0.9s when stationary.
     if (speedSq < 0.02) {
@@ -182,25 +213,37 @@ export function AstronautController() {
       useSceneStore.getState().setNearWaypoint(nearest);
     }
 
-    // Third-person follow camera (behind current heading).
+    // Third-person follow camera (behind current heading). Damping
+    // constants shrink as runBlend rises so the camera lags behind
+    // during a run — reads as momentum, not jerk.
+    const camLerpPos = THREE.MathUtils.lerp(
+      CAM_LERP_POS,
+      CAM_LERP_POS_RUN,
+      runBlend.current,
+    );
+    const camLerpTarget = THREE.MathUtils.lerp(
+      CAM_LERP_TARGET,
+      CAM_LERP_TARGET_RUN,
+      runBlend.current,
+    );
     const behindX = astronaut.position.x - Math.sin(heading.current) * CAM_DISTANCE;
     const behindZ = astronaut.position.z - Math.cos(heading.current) * CAM_DISTANCE;
     camPos.current.x = THREE.MathUtils.damp(
       camPos.current.x,
       behindX,
-      CAM_LERP_POS,
+      camLerpPos,
       dt,
     );
     camPos.current.z = THREE.MathUtils.damp(
       camPos.current.z,
       behindZ,
-      CAM_LERP_POS,
+      camLerpPos,
       dt,
     );
     camPos.current.y = THREE.MathUtils.damp(
       camPos.current.y,
       CAM_HEIGHT + astronaut.position.y,
-      CAM_LERP_POS,
+      camLerpPos,
       dt,
     );
 
@@ -211,19 +254,19 @@ export function AstronautController() {
     camTarget.current.x = THREE.MathUtils.damp(
       camTarget.current.x,
       aheadX,
-      CAM_LERP_TARGET,
+      camLerpTarget,
       dt,
     );
     camTarget.current.z = THREE.MathUtils.damp(
       camTarget.current.z,
       aheadZ,
-      CAM_LERP_TARGET,
+      camLerpTarget,
       dt,
     );
     camTarget.current.y = THREE.MathUtils.damp(
       camTarget.current.y,
       1.4 + astronaut.position.y,
-      CAM_LERP_TARGET,
+      camLerpTarget,
       dt,
     );
 

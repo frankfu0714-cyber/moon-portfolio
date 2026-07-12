@@ -9,6 +9,7 @@ const KEY_LEFT = new Set(["KeyA", "ArrowLeft"]);
 const KEY_RIGHT = new Set(["KeyD", "ArrowRight"]);
 const KEY_INTERACT = new Set(["KeyE", "Enter"]);
 const KEY_CLOSE = new Set(["Escape"]);
+const KEY_RUN = new Set(["ShiftLeft", "ShiftRight"]);
 
 export function useKeyboardInput() {
   const pressed = useRef<Set<string>>(new Set());
@@ -22,7 +23,8 @@ export function useKeyboardInput() {
         (p.has("forward") ? 1 : 0) - (p.has("back") ? 1 : 0);
       const strafe =
         (p.has("right") ? 1 : 0) - (p.has("left") ? 1 : 0);
-      useSceneStore.getState().setWalkInput({ forward, strafe });
+      const running = p.has("run");
+      useSceneStore.getState().setWalkInput({ forward, strafe, running });
     };
 
     const onDown = (e: KeyboardEvent) => {
@@ -63,6 +65,9 @@ export function useKeyboardInput() {
       } else if (KEY_RIGHT.has(e.code) && !pressed.current.has("right")) {
         pressed.current.add("right");
         changed = true;
+      } else if (KEY_RUN.has(e.code) && !pressed.current.has("run")) {
+        pressed.current.add("run");
+        changed = true;
       }
       if (changed) publish();
     };
@@ -73,6 +78,7 @@ export function useKeyboardInput() {
       else if (KEY_BACK.has(e.code) && pressed.current.delete("back")) changed = true;
       else if (KEY_LEFT.has(e.code) && pressed.current.delete("left")) changed = true;
       else if (KEY_RIGHT.has(e.code) && pressed.current.delete("right")) changed = true;
+      else if (KEY_RUN.has(e.code) && pressed.current.delete("run")) changed = true;
       if (changed) publish();
     };
 

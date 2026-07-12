@@ -49,6 +49,10 @@ export function HUD() {
                 <span className="ml-2">walk</span>
               </div>
               <div>
+                <Kbd>Shift</Kbd>
+                <span className="ml-2">hold to run</span>
+              </div>
+              <div>
                 <Kbd>E</Kbd>
                 <span className="ml-2">interact at a flag</span>
               </div>

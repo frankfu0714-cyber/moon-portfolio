@@ -15,6 +15,8 @@ export function DPad() {
     const input: WalkInput = {
       forward: (p.has("up") ? 1 : 0) - (p.has("down") ? 1 : 0),
       strafe: (p.has("right") ? 1 : 0) - (p.has("left") ? 1 : 0),
+      // Mobile has no shift; run is desktop-only for now.
+      running: false,
     };
     setWalkInput(input);
   }, [setWalkInput]);
