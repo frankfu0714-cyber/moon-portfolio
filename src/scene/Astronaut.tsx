@@ -8,7 +8,7 @@ import {
   useRef,
 } from "react";
 import { useFrame } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
+import { useAnimations, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
 export type AstronautHandle = {
@@ -21,52 +21,29 @@ type Props = {
 };
 
 const MODEL_URL = "/models/astronaut.glb";
-// Rig is standard Mixamo. GLTFLoader strips the ':' from names, so
-// `mixamorig:Hips` in the raw GLB is exposed as `mixamorigHips`.
-const BONE = {
-  hips: "mixamorigHips",
-  spine: "mixamorigSpine",
-  head: "mixamorigHead",
-  leftUpLeg: "mixamorigLeftUpLeg",
-  rightUpLeg: "mixamorigRightUpLeg",
-  leftLeg: "mixamorigLeftLeg",
-  rightLeg: "mixamorigRightLeg",
-  leftFoot: "mixamorigLeftFoot",
-  rightFoot: "mixamorigRightFoot",
-  leftArm: "mixamorigLeftArm",
-  rightArm: "mixamorigRightArm",
-  leftForeArm: "mixamorigLeftForeArm",
-  rightForeArm: "mixamorigRightForeArm",
-} as const;
 
-const MODEL_SCALE = 1.0;
+// Quaternius' Astronaut A ships baked animations under the
+// `CharacterArmature|<Name>` naming scheme. We only need these three; the
+// other 21 clips (Wave, Jump, Duck, etc.) stay unbound.
+const CLIP_IDLE = "CharacterArmature|Idle";
+const CLIP_WALK = "CharacterArmature|Walk";
+const CLIP_RUN = "CharacterArmature|Run";
 
-// Fold arms from the T-pose baked into the rig down to hang along the body.
-// The GLB's arm bones have local Y running along the bone (outward in T-pose),
-// so `rotation.z` pivots the arm up/down in the shoulder plane. ~1.55 rad
-// (~89°, ≈ π/2) drops the arm fully vertical along the torso — anything less
-// left the shoulders read as "half-shrugged". Sign is flipped on the right
-// side so both arms fold inward.
-const ARM_DOWN_ANGLE = 1.55;
-// Subtle backward pitch on the arm's swing axis so the hands rest just
-// behind the hip line at idle, matching a relaxed-standing pose. A positive
-// value would push the hands forward toward waist-hover territory — read
-// as awkward from Frank's screenshot review.
-const ARM_REST_PITCH = -0.05;
-// Peak knee flex during the swing phase (radians). Negative rotation.x on the
-// lower-leg bone bends the knee "backward" (calf up toward butt).
-const KNEE_BEND_ANGLE = 0.7;
-// Fraction of knee bend that carries into the ankle so the foot doesn't drag.
-const FOOT_FOLLOW = 0.3;
-// How fast the walk pose fades in/out as speed crosses the moving threshold.
-// Full blend in ~0.25s so idle→walk isn't a snap.
-const WALK_BLEND_LERP = 8;
+// The Quaternius rig is authored at a much bigger world scale than the
+// procedural astronaut it replaces. Scaled down so the astronaut roughly
+// matches the previous framing (head just under the top of the third-person
+// camera's near-plane bracket).
+const MODEL_SCALE = 0.55;
+
 // Speed cap targets — must stay in sync with AstronautController's
-// WALK_SPEED / RUN_SPEED so the walk-amount envelope hits 1.0 at each cap.
-const WALK_SPEED_CAP = 1.2;
-const RUN_SPEED_CAP = 2.6;
+// WALK_SPEED / RUN_SPEED so the walk-vs-idle envelope hits its threshold at
+// the right velocity.
+const WALK_START_SPEED = 0.15; // below this the astronaut is treated as idle
+const CROSSFADE_S = 0.15; // Frank spec: "smooth transition over ~150ms"
 
 useGLTF.preload(MODEL_URL);
+
+type Anim = "idle" | "walk" | "run";
 
 export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   { onFootstep },
@@ -74,78 +51,63 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
 ) {
   const groupRef = useRef<THREE.Group>(null);
   const tiltGroup = useRef<THREE.Group>(null);
-  const walkPhase = useRef(0);
-  const walkBlend = useRef(0);
-  const lastFootstepStep = useRef(0);
+  const currentAnim = useRef<Anim>("idle");
+  const lastFootstepPhase = useRef(0);
   const stepPos = useRef(new THREE.Vector3());
 
-  const { scene } = useGLTF(MODEL_URL);
+  const gltf = useGLTF(MODEL_URL);
+  // We DO want the raw GLB scene (with its skeleton), but a fresh instance
+  // per component so multiple <Astronaut>s wouldn't collide. Here there's
+  // only one, but cloning is cheap and keeps us safe against StrictMode
+  // double-mount stealing the skeleton from the cached scene.
+  //
+  // NOTE: SkeletonUtils.clone would be more correct for skinned meshes with
+  // shared skeletons, but for this single-instance use `scene.clone(true)`
+  // preserves the bones enough for the mixer to bind to `clipRoot`.
+  const clonedScene = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
 
-  const bones = useMemo(() => {
-    const find = (name: string) => {
-      if (!scene) return null;
-      return (scene.getObjectByName(name) as THREE.Object3D | undefined) ?? null;
-    };
-    return {
-      hips: find(BONE.hips),
-      spine: find(BONE.spine),
-      head: find(BONE.head),
-      leftUpLeg: find(BONE.leftUpLeg),
-      rightUpLeg: find(BONE.rightUpLeg),
-      leftLeg: find(BONE.leftLeg),
-      rightLeg: find(BONE.rightLeg),
-      leftFoot: find(BONE.leftFoot),
-      rightFoot: find(BONE.rightFoot),
-      leftArm: find(BONE.leftArm),
-      rightArm: find(BONE.rightArm),
-      leftForeArm: find(BONE.leftForeArm),
-      rightForeArm: find(BONE.rightForeArm),
-    };
-  }, [scene]);
-
-  const rest = useMemo(() => {
-    const snap = (b: THREE.Object3D | null) => ({
-      x: b?.rotation.x ?? 0,
-      y: b?.rotation.y ?? 0,
-      z: b?.rotation.z ?? 0,
-      py: b?.position.y ?? 0,
-    });
-    return {
-      hips: snap(bones.hips),
-      spine: snap(bones.spine),
-      head: snap(bones.head),
-      leftUpLeg: snap(bones.leftUpLeg),
-      rightUpLeg: snap(bones.rightUpLeg),
-      leftLeg: snap(bones.leftLeg),
-      rightLeg: snap(bones.rightLeg),
-      leftFoot: snap(bones.leftFoot),
-      rightFoot: snap(bones.rightFoot),
-      leftArm: snap(bones.leftArm),
-      rightArm: snap(bones.rightArm),
-      leftForeArm: snap(bones.leftForeArm),
-      rightForeArm: snap(bones.rightForeArm),
-    };
-  }, [bones]);
+  // Bind the AnimationMixer to the CLONED scene so each animation drives
+  // this instance's skeleton, not the cached original. The clips themselves
+  // (targetsBoneName) resolve against the mixer root's descendant tree.
+  const { actions, names } = useAnimations(gltf.animations, clonedScene);
 
   useEffect(() => {
-    if (!scene) return;
-    scene.traverse((obj) => {
+    clonedScene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (mesh.isMesh) {
         mesh.castShadow = true;
         mesh.frustumCulled = false;
       }
     });
-    const missing = (Object.entries(bones) as Array<[string, unknown]>)
-      .filter(([, b]) => !b)
-      .map(([k]) => k);
+  }, [clonedScene]);
+
+  // Log discovered clips once so we can spot rig-name drift without a
+  // debugger. If the expected three clips aren't there, warn loudly.
+  useEffect(() => {
+    if (!names.length) return;
+    console.log("[Astronaut] baked animation clips:", names);
+    const expected = [CLIP_IDLE, CLIP_WALK, CLIP_RUN];
+    const missing = expected.filter((n) => !actions[n]);
     if (missing.length) {
       console.warn(
-        "[Astronaut] Missing bones — walk retarget degraded:",
+        "[Astronaut] missing expected clips — animation will be degraded:",
         missing,
       );
     }
-  }, [scene, bones]);
+  }, [names, actions]);
+
+  // Start Idle immediately on mount so the astronaut isn't a T-pose statue
+  // while we wait for the first useFrame tick.
+  useEffect(() => {
+    const idle = actions[CLIP_IDLE];
+    if (!idle) return;
+    idle.reset();
+    idle.setLoop(THREE.LoopRepeat, Infinity);
+    idle.play();
+    return () => {
+      idle.stop();
+    };
+  }, [actions]);
 
   useImperativeHandle(ref, () => ({
     get group() {
@@ -156,136 +118,61 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     },
   }));
 
-  useFrame((_, deltaRaw) => {
+  const crossfadeTo = (next: Anim) => {
+    if (currentAnim.current === next) return;
+    const nameFor: Record<Anim, string> = {
+      idle: CLIP_IDLE,
+      walk: CLIP_WALK,
+      run: CLIP_RUN,
+    };
+    const nextAction = actions[nameFor[next]];
+    const prevAction = actions[nameFor[currentAnim.current]];
+    if (!nextAction) return;
+    nextAction.reset();
+    nextAction.setLoop(THREE.LoopRepeat, Infinity);
+    nextAction.setEffectiveWeight(1);
+    nextAction.enabled = true;
+    nextAction.fadeIn(CROSSFADE_S);
+    nextAction.play();
+    if (prevAction && prevAction !== nextAction) {
+      prevAction.fadeOut(CROSSFADE_S);
+    }
+    currentAnim.current = next;
+  };
+
+  useFrame(() => {
     const g = groupRef.current;
     if (!g) return;
-    const delta = Math.min(deltaRaw, 0.05);
 
     const speedSquared =
       (g.userData.speedSquared as number | undefined) ?? 0;
     const speed = Math.sqrt(speedSquared);
-    // AstronautController owns runBlend (smoothed shift-key envelope). Use
-    // it here to scale the animation as well as the "what does full-speed
-    // mean" envelope. At runBlend=1, the effective cap is RUN_SPEED_CAP so
-    // walkAmount still hits 1.0 at max jog speed.
     const runBlend = (g.userData.runBlend as number | undefined) ?? 0;
-    const effectiveCap =
-      WALK_SPEED_CAP + (RUN_SPEED_CAP - WALK_SPEED_CAP) * runBlend;
-    // Instantaneous walk envelope from speed, then smoothly lerp into the
-    // persistent walkBlend so idle→walk (and walk→idle) doesn't snap. All
-    // walk-cycle rotations are scaled by walkBlend, so at rest the pose is
-    // exactly the bind pose (arms down, legs straight).
-    const speedEnv = Math.min(speed / effectiveCap, 1);
-    walkBlend.current +=
-      (speedEnv - walkBlend.current) * Math.min(1, WALK_BLEND_LERP * delta);
-    const walkAmount = walkBlend.current;
 
-    // Cycle frequency: 1.8 Hz walking → 3.06 Hz jogging (1.7×). Amplitude
-    // multiplier: 1× walking → 1.5× jogging on both hips and shoulders.
-    // Arm-to-leg ratio bumps 0.65 → 0.85 so arms pump more aggressively.
-    const cycleMul = 1 + runBlend * 0.7;
-    const swingMul = 1 + runBlend * 0.5;
-    const armRatio = 0.65 + runBlend * 0.20;
-    const cycleSpeed = walkAmount * Math.PI * 2 * 1.8 * cycleMul;
-    walkPhase.current += cycleSpeed * delta;
+    // Pick clip: idle when nearly stopped, run when the controller says the
+    // shift-run envelope is dominant, walk otherwise.
+    let target: Anim;
+    if (speed < WALK_START_SPEED) target = "idle";
+    else if (runBlend > 0.5) target = "run";
+    else target = "walk";
+    crossfadeTo(target);
 
-    const phase = walkPhase.current;
-    const legSwing = Math.sin(phase) * 0.75 * walkAmount * swingMul;
-    // Arms phase-locked opposite the same-side leg (left arm with right
-    // leg is what the human eye reads as natural).
-    const armSwing = Math.sin(phase) * 0.75 * armRatio * walkAmount * swingMul;
-    // Knee bend only fires during the leg's swing phase (foot lifted). Cap
-    // at 0 so we never hyperextend the knee during the stance phase.
-    const leftKneeBend =
-      -Math.max(0, Math.sin(phase + Math.PI / 2)) *
-      KNEE_BEND_ANGLE *
-      walkAmount *
-      swingMul;
-    const rightKneeBend =
-      -Math.max(0, Math.sin(phase - Math.PI / 2)) *
-      KNEE_BEND_ANGLE *
-      walkAmount *
-      swingMul;
-    const doubleBob = Math.abs(Math.sin(phase * 2)) * walkAmount;
-
-    if (bones.leftUpLeg) {
-      bones.leftUpLeg.rotation.x = rest.leftUpLeg.x + legSwing;
-    }
-    if (bones.rightUpLeg) {
-      bones.rightUpLeg.rotation.x = rest.rightUpLeg.x - legSwing;
-    }
-    if (bones.leftLeg) {
-      bones.leftLeg.rotation.x = rest.leftLeg.x + leftKneeBend;
-    }
-    if (bones.rightLeg) {
-      bones.rightLeg.rotation.x = rest.rightLeg.x + rightKneeBend;
-    }
-    if (bones.leftFoot) {
-      bones.leftFoot.rotation.x = rest.leftFoot.x + leftKneeBend * FOOT_FOLLOW;
-    }
-    if (bones.rightFoot) {
-      bones.rightFoot.rotation.x =
-        rest.rightFoot.x + rightKneeBend * FOOT_FOLLOW;
-    }
-    // Arms: hang along the body via rotation.z; a tiny backward tilt on X
-    // seats the hands at the hip line (not floating in front); walk swing
-    // layers on top. Forearms are explicitly straightened — the J-Toastie
-    // rig's forearm bind pose isn't perfectly co-linear with the upper
-    // arm, and any residual bend reads as "hands hovering in front".
-    if (bones.leftArm) {
-      bones.leftArm.rotation.x = rest.leftArm.x + ARM_REST_PITCH - armSwing;
-      bones.leftArm.rotation.z = rest.leftArm.z + ARM_DOWN_ANGLE;
-    }
-    if (bones.rightArm) {
-      bones.rightArm.rotation.x = rest.rightArm.x + ARM_REST_PITCH + armSwing;
-      bones.rightArm.rotation.z = rest.rightArm.z - ARM_DOWN_ANGLE;
-    }
-    // Zero the forearm's local rotation so it stays co-linear with the
-    // upper arm regardless of what the bind pose has cached.
-    if (bones.leftForeArm) {
-      bones.leftForeArm.rotation.set(0, 0, 0);
-    }
-    if (bones.rightForeArm) {
-      bones.rightForeArm.rotation.set(0, 0, 0);
-    }
-    if (bones.spine) {
-      // Side-to-side sway around Z reads as counter-rotation of the shoulders
-      // vs the hips — the classic "walk shimmy". Amplitude stays subtle.
-      bones.spine.rotation.z =
-        rest.spine.z + Math.sin(phase) * 0.04 * walkAmount * swingMul;
-    }
-    if (bones.head) {
-      bones.head.rotation.x =
-        rest.head.x - Math.abs(Math.sin(phase * 2)) * 0.05 * walkAmount;
-    }
-
-    // Root bob + idle breathing on the hips. During walk, subtract a
-    // vertical bob so the hips dip on double-step (both feet on ground) —
-    // matches doubleBob's 2× frequency naturally. Running deepens the dip
-    // from ~5cm to ~10cm as runBlend rises.
-    if (bones.hips) {
-      const idleT = performance.now() * 0.001;
-      const idleWobble =
-        walkAmount < 0.1 ? Math.sin(idleT * 1.6) * 0.02 : 0;
-      const bobDepth = 0.05 + runBlend * 0.05;
-      const walkBob = -doubleBob * bobDepth;
-      bones.hips.position.y = rest.hips.py + idleWobble + walkBob;
-    }
-    if (bones.head && walkAmount < 0.1) {
-      const idleT = performance.now() * 0.001;
-      bones.head.rotation.y = rest.head.y + Math.sin(idleT * 0.6) * 0.08;
-    } else if (bones.head) {
-      bones.head.rotation.y = rest.head.y;
-    }
-
-    // Emit footstep at each half-cycle (walkPhase crossing multiples of PI).
-    // AstronautController grounds `g.position.y` to the terrain — pass the
-    // full world position so puffs settle on the surface, not at y=0.
-    if (walkAmount > 0.15 && onFootstep) {
-      const currentStep = Math.floor(walkPhase.current / Math.PI);
-      if (currentStep !== lastFootstepStep.current) {
-        lastFootstepStep.current = currentStep;
-        const side = currentStep % 2 === 0 ? 1 : -1;
+    // Footstep dust — tied to the walk/run action's cycle time so puffs
+    // land in sync with the baked animation's foot-plant beats. Two step
+    // beats per loop, so we fire at every half-cycle boundary.
+    const activeAction =
+      currentAnim.current === "run"
+        ? actions[CLIP_RUN]
+        : currentAnim.current === "walk"
+          ? actions[CLIP_WALK]
+          : null;
+    if (activeAction && onFootstep) {
+      const clipLen = activeAction.getClip().duration || 1;
+      const cycle = activeAction.time / clipLen; // 0..1
+      const halfStep = Math.floor(cycle * 2);
+      if (halfStep !== lastFootstepPhase.current) {
+        lastFootstepPhase.current = halfStep;
+        const side = halfStep % 2 === 0 ? 1 : -1;
         stepPos.current.set(
           g.position.x + Math.cos(g.rotation.y) * side * 0.18,
           g.position.y,
@@ -293,13 +180,18 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
         );
         onFootstep(stepPos.current);
       }
+    } else {
+      // Reset so the first step after starting to walk always fires.
+      lastFootstepPhase.current = -1;
     }
   });
 
   return (
     <group ref={groupRef} position={[0, 0, 0]}>
       <group ref={tiltGroup}>
-        <primitive object={scene} scale={MODEL_SCALE} />
+        <group scale={MODEL_SCALE}>
+          <primitive object={clonedScene} />
+        </group>
       </group>
     </group>
   );
