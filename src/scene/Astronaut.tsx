@@ -67,9 +67,9 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   const clonedScene = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
 
   // Strip root-translation tracks from every clip before we hand them to the
-  // mixer. Quaternius' Walk and Run clips include a baked hip/root position
-  // track that shifts the character forward in place — beautiful for a demo
-  // reel, but here it fights `AstronautController`, which owns the world
+  // mixer. Quaternius' Walk and Run clips include baked hip/root position
+  // tracks that shift the character forward in place — beautiful for a demo
+  // reel, but here they fight `AstronautController`, which owns the world
   // position (WASD → velocity → root translation). If both apply, the
   // mixer's periodic reset of hip.position back to the loop start cancels
   // out the controller's per-frame delta and the astronaut plays the
@@ -77,14 +77,39 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   //
   // Fix: rebuild each clip without any `.position` tracks. We only want the
   // rig's bone rotations from the clip. Done once per gltf, cached in
-  // `strippedClips`. This mutates a *copy* of each clip so the shared
+  // `strippedClips`. This clones each clip before mutating so the shared
   // useGLTF cache isn't affected across remounts.
+  //
+  // Guards:
+  // - If the filter would leave a clip with ZERO tracks (i.e. it was
+  //   position-only), keep the original untouched. An empty-tracks clip
+  //   makes `AnimationMixer.clipAction` return an action that plays
+  //   nothing, and on some Three.js versions the mixer walks the empty
+  //   track list into a bind step that throws. Cheaper to keep the tiny
+  //   root drift than to risk a black-scene.
+  // - Any thrown error inside the memo falls back to the raw
+  //   `gltf.animations` — root motion returns, but the scene renders.
   const strippedClips = useMemo(() => {
-    return gltf.animations.map((clip) => {
-      const c = clip.clone();
-      c.tracks = c.tracks.filter((t) => !t.name.endsWith(".position"));
-      return c;
-    });
+    try {
+      return gltf.animations.map((clip) => {
+        const nonPos = clip.tracks.filter(
+          (t) => !t.name.endsWith(".position"),
+        );
+        if (nonPos.length === 0 || nonPos.length === clip.tracks.length) {
+          // Nothing to strip, OR stripping would empty the clip.
+          return clip;
+        }
+        const c = clip.clone();
+        c.tracks = nonPos;
+        return c;
+      });
+    } catch (err) {
+      console.warn(
+        "[Astronaut] track-strip failed; falling back to raw clips —",
+        err,
+      );
+      return gltf.animations;
+    }
   }, [gltf.animations]);
 
   // Bind the AnimationMixer to the CLONED scene so each animation drives
@@ -128,15 +153,25 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   }, [names, actions, gltf.animations, strippedClips]);
 
   // Start Idle immediately on mount so the astronaut isn't a T-pose statue
-  // while we wait for the first useFrame tick.
+  // while we wait for the first useFrame tick. Wrapped in try/catch so a
+  // broken clip binding can't unmount the whole Canvas subtree.
   useEffect(() => {
     const idle = actions[CLIP_IDLE];
     if (!idle) return;
-    idle.reset();
-    idle.setLoop(THREE.LoopRepeat, Infinity);
-    idle.play();
+    try {
+      idle.reset();
+      idle.setLoop(THREE.LoopRepeat, Infinity);
+      idle.play();
+    } catch (err) {
+      console.warn("[Astronaut] failed to start idle clip —", err);
+      return;
+    }
     return () => {
-      idle.stop();
+      try {
+        idle.stop();
+      } catch {
+        // ignore
+      }
     };
   }, [actions]);
 
@@ -159,16 +194,22 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     const nextAction = actions[nameFor[next]];
     const prevAction = actions[nameFor[currentAnim.current]];
     if (!nextAction) return;
-    nextAction.reset();
-    nextAction.setLoop(THREE.LoopRepeat, Infinity);
-    nextAction.setEffectiveWeight(1);
-    nextAction.enabled = true;
-    nextAction.fadeIn(CROSSFADE_S);
-    nextAction.play();
-    if (prevAction && prevAction !== nextAction) {
-      prevAction.fadeOut(CROSSFADE_S);
+    try {
+      nextAction.reset();
+      nextAction.setLoop(THREE.LoopRepeat, Infinity);
+      nextAction.setEffectiveWeight(1);
+      nextAction.enabled = true;
+      nextAction.fadeIn(CROSSFADE_S);
+      nextAction.play();
+      if (prevAction && prevAction !== nextAction) {
+        prevAction.fadeOut(CROSSFADE_S);
+      }
+      currentAnim.current = next;
+    } catch (err) {
+      // Never let an animation error kill the useFrame loop — that would
+      // freeze the whole Canvas.
+      console.warn("[Astronaut] crossfade failed —", err);
     }
-    currentAnim.current = next;
   };
 
   useFrame(() => {
