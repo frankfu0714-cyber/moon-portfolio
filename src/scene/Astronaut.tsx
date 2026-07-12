@@ -31,14 +31,22 @@ const BONE = {
   rightUpLeg: "mixamorigRightUpLeg",
   leftArm: "mixamorigLeftArm",
   rightArm: "mixamorigRightArm",
+  leftForeArm: "mixamorigLeftForeArm",
+  rightForeArm: "mixamorigRightForeArm",
 } as const;
 
 const MODEL_SCALE = 1.0;
 
-// Fold arms down from the T-pose baked into the rig. Positive angle rotates
-// the arm bone around its local Z toward the body — matches the walk-swing
-// axis being local X.
-const ARM_DOWN_ANGLE = 1.2;
+// Fold arms from the T-pose baked into the rig down to hang at the sides.
+// The GLB's arm bones have local Y running along the bone (outward in T-pose),
+// so `rotation.z` pivots the arm up/down in the shoulder plane. ~1.35 rad
+// (~77°) brings the arm from horizontal to nearly vertical along the torso.
+const ARM_DOWN_ANGLE = 1.35;
+// Small forward rotation on the arm's swing axis so the hands sit slightly in
+// front of the hips instead of clipping the backpack/torso side.
+const ARM_FORWARD_TWEAK = 0.08;
+// Subtle elbow bend so the forearm doesn't lock straight and read robotic.
+const FOREARM_BEND_ANGLE = 0.15;
 
 useGLTF.preload(MODEL_URL);
 
@@ -65,6 +73,8 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
       rightUpLeg: find(BONE.rightUpLeg),
       leftArm: find(BONE.leftArm),
       rightArm: find(BONE.rightArm),
+      leftForeArm: find(BONE.leftForeArm),
+      rightForeArm: find(BONE.rightForeArm),
     };
   }, [scene]);
 
@@ -83,6 +93,8 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
       rightUpLeg: snap(bones.rightUpLeg),
       leftArm: snap(bones.leftArm),
       rightArm: snap(bones.rightArm),
+      leftForeArm: snap(bones.leftForeArm),
+      rightForeArm: snap(bones.rightForeArm),
     };
   }, [bones]);
 
@@ -136,14 +148,23 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     if (bones.rightUpLeg) {
       bones.rightUpLeg.rotation.x = rest.rightUpLeg.x - legSwing;
     }
-    // Arms: hold A-pose baseline on Z, layer walk swing on X.
+    // Arms: hang at sides (rotation.z bind), layer walk swing on X on top.
+    // ARM_FORWARD_TWEAK nudges the hands slightly in front of the hips so
+    // they don't clip the backpack/torso side.
     if (bones.leftArm) {
-      bones.leftArm.rotation.x = rest.leftArm.x - armSwing;
+      bones.leftArm.rotation.x = rest.leftArm.x + ARM_FORWARD_TWEAK - armSwing;
       bones.leftArm.rotation.z = rest.leftArm.z + ARM_DOWN_ANGLE;
     }
     if (bones.rightArm) {
-      bones.rightArm.rotation.x = rest.rightArm.x + armSwing;
+      bones.rightArm.rotation.x = rest.rightArm.x + ARM_FORWARD_TWEAK + armSwing;
       bones.rightArm.rotation.z = rest.rightArm.z - ARM_DOWN_ANGLE;
+    }
+    // Subtle elbow bend so forearms don't lock straight.
+    if (bones.leftForeArm) {
+      bones.leftForeArm.rotation.z = rest.leftForeArm.z + FOREARM_BEND_ANGLE;
+    }
+    if (bones.rightForeArm) {
+      bones.rightForeArm.rotation.z = rest.rightForeArm.z - FOREARM_BEND_ANGLE;
     }
     if (bones.spine) {
       bones.spine.rotation.x =
