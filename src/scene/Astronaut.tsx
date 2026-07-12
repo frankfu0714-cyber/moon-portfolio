@@ -41,16 +41,18 @@ const BONE = {
 
 const MODEL_SCALE = 1.0;
 
-// Fold arms from the T-pose baked into the rig down to hang at the sides.
+// Fold arms from the T-pose baked into the rig down to hang along the body.
 // The GLB's arm bones have local Y running along the bone (outward in T-pose),
-// so `rotation.z` pivots the arm up/down in the shoulder plane. ~1.35 rad
-// (~77°) brings the arm from horizontal to nearly vertical along the torso.
-const ARM_DOWN_ANGLE = 1.35;
-// Small forward rotation on the arm's swing axis so the hands sit slightly in
-// front of the hips instead of clipping the backpack/torso side.
-const ARM_FORWARD_TWEAK = 0.08;
-// Subtle elbow bend so the forearm doesn't lock straight and read robotic.
-const FOREARM_BEND_ANGLE = 0.15;
+// so `rotation.z` pivots the arm up/down in the shoulder plane. ~1.55 rad
+// (~89°, ≈ π/2) drops the arm fully vertical along the torso — anything less
+// left the shoulders read as "half-shrugged". Sign is flipped on the right
+// side so both arms fold inward.
+const ARM_DOWN_ANGLE = 1.55;
+// Subtle backward pitch on the arm's swing axis so the hands rest just
+// behind the hip line at idle, matching a relaxed-standing pose. A positive
+// value would push the hands forward toward waist-hover territory — read
+// as awkward from Frank's screenshot review.
+const ARM_REST_PITCH = -0.05;
 // Peak knee flex during the swing phase (radians). Negative rotation.x on the
 // lower-leg bone bends the knee "backward" (calf up toward butt).
 const KNEE_BEND_ANGLE = 0.7;
@@ -225,23 +227,26 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
       bones.rightFoot.rotation.x =
         rest.rightFoot.x + rightKneeBend * FOOT_FOLLOW;
     }
-    // Arms: hang at sides (rotation.z bind), layer walk swing on X on top.
-    // ARM_FORWARD_TWEAK nudges the hands slightly in front of the hips so
-    // they don't clip the backpack/torso side.
+    // Arms: hang along the body via rotation.z; a tiny backward tilt on X
+    // seats the hands at the hip line (not floating in front); walk swing
+    // layers on top. Forearms are explicitly straightened — the J-Toastie
+    // rig's forearm bind pose isn't perfectly co-linear with the upper
+    // arm, and any residual bend reads as "hands hovering in front".
     if (bones.leftArm) {
-      bones.leftArm.rotation.x = rest.leftArm.x + ARM_FORWARD_TWEAK - armSwing;
+      bones.leftArm.rotation.x = rest.leftArm.x + ARM_REST_PITCH - armSwing;
       bones.leftArm.rotation.z = rest.leftArm.z + ARM_DOWN_ANGLE;
     }
     if (bones.rightArm) {
-      bones.rightArm.rotation.x = rest.rightArm.x + ARM_FORWARD_TWEAK + armSwing;
+      bones.rightArm.rotation.x = rest.rightArm.x + ARM_REST_PITCH + armSwing;
       bones.rightArm.rotation.z = rest.rightArm.z - ARM_DOWN_ANGLE;
     }
-    // Subtle elbow bend so forearms don't lock straight.
+    // Zero the forearm's local rotation so it stays co-linear with the
+    // upper arm regardless of what the bind pose has cached.
     if (bones.leftForeArm) {
-      bones.leftForeArm.rotation.z = rest.leftForeArm.z + FOREARM_BEND_ANGLE;
+      bones.leftForeArm.rotation.set(0, 0, 0);
     }
     if (bones.rightForeArm) {
-      bones.rightForeArm.rotation.z = rest.rightForeArm.z - FOREARM_BEND_ANGLE;
+      bones.rightForeArm.rotation.set(0, 0, 0);
     }
     if (bones.spine) {
       // Side-to-side sway around Z reads as counter-rotation of the shoulders
