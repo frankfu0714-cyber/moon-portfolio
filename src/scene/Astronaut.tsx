@@ -66,10 +66,30 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   // preserves the bones enough for the mixer to bind to `clipRoot`.
   const clonedScene = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
 
+  // Strip root-translation tracks from every clip before we hand them to the
+  // mixer. Quaternius' Walk and Run clips include a baked hip/root position
+  // track that shifts the character forward in place — beautiful for a demo
+  // reel, but here it fights `AstronautController`, which owns the world
+  // position (WASD → velocity → root translation). If both apply, the
+  // mixer's periodic reset of hip.position back to the loop start cancels
+  // out the controller's per-frame delta and the astronaut plays the
+  // animation in place while the camera pans forward.
+  //
+  // Fix: rebuild each clip without any `.position` tracks. We only want the
+  // rig's bone rotations from the clip. Done once per gltf, cached in
+  // `strippedClips`. This mutates a *copy* of each clip so the shared
+  // useGLTF cache isn't affected across remounts.
+  const strippedClips = useMemo(() => {
+    return gltf.animations.map((clip) => {
+      const c = clip.clone();
+      c.tracks = c.tracks.filter((t) => !t.name.endsWith(".position"));
+      return c;
+    });
+  }, [gltf.animations]);
+
   // Bind the AnimationMixer to the CLONED scene so each animation drives
-  // this instance's skeleton, not the cached original. The clips themselves
-  // (targetsBoneName) resolve against the mixer root's descendant tree.
-  const { actions, names } = useAnimations(gltf.animations, clonedScene);
+  // this instance's skeleton, not the cached original.
+  const { actions, names } = useAnimations(strippedClips, clonedScene);
 
   useEffect(() => {
     clonedScene.traverse((obj) => {
@@ -82,10 +102,21 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   }, [clonedScene]);
 
   // Log discovered clips once so we can spot rig-name drift without a
-  // debugger. If the expected three clips aren't there, warn loudly.
+  // debugger. If the expected three clips aren't there, warn loudly. Also
+  // report how many .position tracks were stripped from Walk / Run so we
+  // can confirm the anti-root-motion filter is doing what we expect.
   useEffect(() => {
     if (!names.length) return;
     console.log("[Astronaut] baked animation clips:", names);
+    const strippedFrom = (name: string) => {
+      const orig = gltf.animations.find((c) => c.name === name);
+      const kept = strippedClips.find((c) => c.name === name);
+      if (!orig || !kept) return 0;
+      return orig.tracks.length - kept.tracks.length;
+    };
+    console.log(
+      `[Astronaut] position tracks stripped — walk=${strippedFrom(CLIP_WALK)} run=${strippedFrom(CLIP_RUN)} idle=${strippedFrom(CLIP_IDLE)}`,
+    );
     const expected = [CLIP_IDLE, CLIP_WALK, CLIP_RUN];
     const missing = expected.filter((n) => !actions[n]);
     if (missing.length) {
@@ -94,7 +125,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
         missing,
       );
     }
-  }, [names, actions]);
+  }, [names, actions, gltf.animations, strippedClips]);
 
   // Start Idle immediately on mount so the astronaut isn't a T-pose statue
   // while we wait for the first useFrame tick.
