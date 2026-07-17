@@ -33,15 +33,15 @@ const CLIP_IDLE = "Standing Idle";
 const CLIP_WALK = "Walking Forward";
 const CLIP_RUN = "Running";
 
-// The GLB's skeleton stands ~74.7 raw units tall (skinned meshes render in
-// skeleton space, ignoring node scale, so runtime bbox measurement lies —
-// this is a measured constant instead). 74.7 * 0.0234 ≈ 1.75 world units.
-const MODEL_SCALE = 0.0234;
-const MODEL_Y_OFFSET = 0.03; // raw feet sit at y ≈ -1.23 → lift into place
+// The GLB root node already bakes a 0.0242 normalization scale — the loaded
+// scene stands 1.80 units tall with feet at y = 0 (verified empirically in a
+// standalone three r185 harness). 1.80 * 0.97 ≈ 1.75 world units.
+const MODEL_SCALE = 0.97;
+const MODEL_Y_OFFSET = 0.02; // slight lift so boots never z-fight the terrain
 
-// If the model faces the wrong way relative to the controller's heading,
-// adjust this single constant (radians).
-const MODEL_YAW = 0;
+// The model faces -Z at rest; the controller's forward at heading 0 is +Z,
+// so spin the model half a turn to face its direction of travel.
+const MODEL_YAW = Math.PI;
 
 // Below this ground speed the astronaut is idle.
 const WALK_START_SPEED = 0.15;
