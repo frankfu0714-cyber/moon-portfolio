@@ -6,21 +6,24 @@ import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { SafeAsset } from "./SafeAsset";
 
-// Cinematic night-side Earth: deep navy oceans, glowing city lights, a
-// bright atmosphere arc on the sun side — the "looking back home" shot.
-// Day + night textures come from the three.js examples repo on
+// Cinematic night-side Earth matching the reference frame: deep blue
+// globe you can still read continents on, warm glowing city grids, a
+// bright sunlit crescent arc on the right limb, and a soft blue
+// atmosphere halo. Textures come from the three.js examples repo on
 // raw.githubusercontent.com (CORS: *).
 const DAY_MAP_URL =
   "https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/textures/planets/earth_atmos_2048.jpg";
 const LIGHTS_MAP_URL =
   "https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/textures/planets/earth_lights_2048.png";
 
-const EARTH_R = 38;
+const EARTH_R = 42;
 
 function EarthTextureApplier({
-  materialRef,
+  globeRef,
+  lightsRef,
 }: {
-  materialRef: React.RefObject<THREE.MeshStandardMaterial | null>;
+  globeRef: React.RefObject<THREE.MeshBasicMaterial | null>;
+  lightsRef: React.RefObject<THREE.MeshBasicMaterial | null>;
 }) {
   const [dayMap, lightsMap] = useTexture(
     [DAY_MAP_URL, LIGHTS_MAP_URL],
@@ -34,21 +37,23 @@ function EarthTextureApplier({
   );
 
   useEffect(() => {
-    const mat = materialRef.current;
-    if (mat) {
-      // The day map is multiplied by a dark blue tint so the sunlit
-      // continents read as dim night-time ocean/land seen from space,
-      // while the emissive lights map paints the warm city grid on top —
-      // matching the reference frame (dark globe, glowing cities).
-      mat.map = dayMap;
-      mat.color = new THREE.Color("#6d8fc2");
-      mat.emissiveMap = lightsMap;
-      mat.emissive = new THREE.Color("#ffb066");
-      mat.emissiveIntensity = 2.1;
-      mat.roughness = 1;
-      mat.needsUpdate = true;
+    // Unlit basic materials give full control over the look regardless
+    // of scene lighting: the day map tinted a luminous night-blue reads
+    // as moonlit oceans/continents, and the additive lights layer paints
+    // the warm city grid on top so Bloom flares it like the reference.
+    const globe = globeRef.current;
+    if (globe) {
+      globe.map = dayMap;
+      globe.color = new THREE.Color("#7d9ecf");
+      globe.needsUpdate = true;
     }
-  }, [dayMap, lightsMap, materialRef]);
+    const lights = lightsRef.current;
+    if (lights) {
+      lights.map = lightsMap;
+      lights.visible = true;
+      lights.needsUpdate = true;
+    }
+  }, [dayMap, lightsMap, globeRef, lightsRef]);
 
   return null;
 }
@@ -56,7 +61,8 @@ function EarthTextureApplier({
 export function EarthInSky() {
   const groupRef = useRef<THREE.Group>(null);
   const glowRef = useRef<THREE.Mesh>(null);
-  const materialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const globeMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const lightsMatRef = useRef<THREE.MeshBasicMaterial>(null);
 
   useFrame((_, delta) => {
     if (groupRef.current) {
@@ -69,45 +75,70 @@ export function EarthInSky() {
   });
 
   return (
-    <group position={[14, 88, 235]}>
+    <group position={[14, 86, 232]}>
       <group ref={groupRef} rotation={[0.15, 2.6, 0]}>
-        <mesh castShadow={false} receiveShadow={false}>
+        {/* Night-blue globe (unlit, brighter than before) */}
+        <mesh>
           <sphereGeometry args={[EARTH_R, 64, 64]} />
-          <meshStandardMaterial
-            ref={materialRef}
-            color="#31435e"
-            emissive="#0d1a2c"
-            emissiveIntensity={0.5}
-            roughness={1}
-            metalness={0}
+          <meshBasicMaterial ref={globeMatRef} color="#31435e" fog={false} />
+        </mesh>
+        {/* Additive city-lights layer - toneMapped:false pushes it past
+            the Bloom threshold so the grids genuinely glow. Hidden until
+            its texture arrives (a bare white additive sphere would
+            otherwise white out the whole globe). */}
+        <mesh>
+          <sphereGeometry args={[EARTH_R * 1.002, 64, 64]} />
+          <meshBasicMaterial
+            ref={lightsMatRef}
+            visible={false}
+            color="#ffb066"
+            transparent
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            toneMapped={false}
             fog={false}
           />
         </mesh>
       </group>
       <SafeAsset label="earth-texture">
-        <EarthTextureApplier materialRef={materialRef} />
+        <EarthTextureApplier globeRef={globeMatRef} lightsRef={lightsMatRef} />
       </SafeAsset>
-      {/* Even atmospheric rim */}
+      {/* Even atmospheric rim - brighter than before */}
       <mesh>
         <sphereGeometry args={[EARTH_R * 1.02, 48, 48]} />
         <meshBasicMaterial
           color="#9ccaff"
           transparent
-          opacity={0.16}
+          opacity={0.24}
+          blending={THREE.AdditiveBlending}
           side={THREE.BackSide}
           depthWrite={false}
           fog={false}
         />
       </mesh>
-      {/* Offset rim shell — shifted toward the upper-right so its visible
-          ring reads thicker/brighter on one side: a cheap sunlit-crescent
-          arc like the reference. */}
-      <mesh position={[2.2, 1.6, -1.4]}>
-        <sphereGeometry args={[EARTH_R * 1.015, 48, 48]} />
+      {/* Sunlit crescent: a rim shell displaced toward screen-right
+          (-x from the camera's +z view direction) and slightly toward
+          the camera, so its visible ring reads as a bright white-blue
+          arc hugging the right limb - the reference's crescent. */}
+      <mesh position={[-3.2, 1.4, -2.4]}>
+        <sphereGeometry args={[EARTH_R * 1.012, 48, 48]} />
         <meshBasicMaterial
-          color="#dceeff"
+          color="#eaf5ff"
           transparent
-          opacity={0.22}
+          opacity={0.5}
+          blending={THREE.AdditiveBlending}
+          side={THREE.BackSide}
+          depthWrite={false}
+          fog={false}
+        />
+      </mesh>
+      <mesh position={[-1.6, 0.7, -1.2]}>
+        <sphereGeometry args={[EARTH_R * 1.006, 48, 48]} />
+        <meshBasicMaterial
+          color="#cfe6ff"
+          transparent
+          opacity={0.28}
+          blending={THREE.AdditiveBlending}
           side={THREE.BackSide}
           depthWrite={false}
           fog={false}
@@ -115,11 +146,12 @@ export function EarthInSky() {
       </mesh>
       {/* Wide soft halo */}
       <mesh ref={glowRef}>
-        <sphereGeometry args={[EARTH_R * 1.12, 48, 48]} />
+        <sphereGeometry args={[EARTH_R * 1.14, 48, 48]} />
         <meshBasicMaterial
           color="#6fa8e8"
           transparent
-          opacity={0.055}
+          opacity={0.075}
+          blending={THREE.AdditiveBlending}
           side={THREE.BackSide}
           depthWrite={false}
           fog={false}
@@ -128,4 +160,3 @@ export function EarthInSky() {
     </group>
   );
 }
-
