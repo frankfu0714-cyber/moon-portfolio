@@ -9,6 +9,7 @@ import { SafeAsset } from "./SafeAsset";
 import { useSceneStore } from "@/lib/store";
 import { WAYPOINTS, type WaypointId } from "@/lib/waypoints";
 import { sampleSlope, sampleTerrainHeight } from "@/lib/terrain";
+import { resolveRockCollision } from "@/lib/rocks";
 
 const WALK_SPEED = 1.2; // units/sec — chill vibe
 const RUN_SPEED = 2.6; // units/sec — "run slowly" jog
@@ -127,6 +128,11 @@ export function AstronautController() {
     // Apply position.
     astronaut.position.x += velocity.current.x * dt;
     astronaut.position.z += velocity.current.z * dt;
+
+    // Rocks are solid: circle-vs-circle push-out in the XZ plane. Because
+    // only the penetrating component is removed, walking at a rock on an
+    // angle slides you along its flank instead of stopping you dead.
+    resolveRockCollision(astronaut.position);
 
     // Sample the surface and low-pass toward it so the astronaut tracks
     // crater rims and dunes without jitter on high-frequency vertices.
