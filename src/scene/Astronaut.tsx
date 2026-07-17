@@ -32,6 +32,7 @@ const MODEL_URL =
 const CLIP_IDLE = "Standing Idle";
 const CLIP_WALK = "Walking Forward";
 const CLIP_RUN = "Running";
+const CLIP_FALL = "Falling Idle";
 
 // The GLB root node already bakes a 0.0242 normalization scale — the loaded
 // scene stands 1.80 units tall with feet at y = 0 (verified empirically in a
@@ -62,7 +63,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
 ) {
   const groupRef = useRef<THREE.Group>(null);
   const tiltGroup = useRef<THREE.Group>(null);
-  const weights = useRef({ idle: 1, walk: 0, run: 0 });
+  const weights = useRef({ idle: 1, walk: 0, run: 0, fall: 0 });
   const prevCycle = useRef(0);
   const stepPos = useRef(new THREE.Vector3());
 
@@ -93,6 +94,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
       idle: make(find(CLIP_IDLE)),
       walk: make(find(CLIP_WALK)),
       run: make(find(CLIP_RUN)),
+      fall: make(find(CLIP_FALL)),
     };
   }, [gltf.animations, mixer]);
 
@@ -133,10 +135,15 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     const speedSquared = (g.userData.speedSquared as number | undefined) ?? 0;
     const speed = Math.sqrt(speedSquared);
     const runBlend = (g.userData.runBlend as number | undefined) ?? 0;
+    const airborne = (g.userData.airborne as boolean | undefined) ?? false;
     const moving = speed >= WALK_START_SPEED;
 
     // Blend animation weights toward the current locomotion state.
     const w = weights.current;
+    // Airborne overrides ground locomotion with a faster blend so the hop
+    // reads immediately.
+    w.fall = THREE.MathUtils.damp(w.fall, airborne ? 1 : 0, 10, dt);
+    const ground = 1 - w.fall;
     w.idle = THREE.MathUtils.damp(w.idle, moving ? 0 : 1, BLEND_RATE, dt);
     w.walk = THREE.MathUtils.damp(
       w.walk,
@@ -146,9 +153,10 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     );
     w.run = THREE.MathUtils.damp(w.run, moving ? runBlend : 0, BLEND_RATE, dt);
 
-    actions.idle?.setEffectiveWeight(w.idle);
-    actions.walk?.setEffectiveWeight(w.walk);
-    actions.run?.setEffectiveWeight(w.run);
+    actions.idle?.setEffectiveWeight(w.idle * ground);
+    actions.walk?.setEffectiveWeight(w.walk * ground);
+    actions.run?.setEffectiveWeight(w.run * ground);
+    actions.fall?.setEffectiveWeight(w.fall);
 
     // Match stride to actual ground speed so feet never slide.
     if (actions.walk) {
@@ -166,7 +174,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
 
     // Footstep dust: the dominant gait clip hits a footfall twice per
     // loop (at ~0% and ~50% of the cycle).
-    if (moving && onFootstep) {
+    if (moving && onFootstep && w.fall < 0.5) {
       const dominant = runBlend > 0.5 ? actions.run : actions.walk;
       if (dominant) {
         const clipDur = dominant.getClip().duration;
@@ -212,3 +220,4 @@ function tuneSuit(mat: THREE.Material): THREE.Material {
   }
   return c;
 }
+
