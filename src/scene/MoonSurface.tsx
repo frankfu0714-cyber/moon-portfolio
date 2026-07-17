@@ -8,7 +8,7 @@ import { sampleTerrainHeight } from "@/lib/terrain";
 import { RockField } from "./RockField";
 
 const RADIUS = 240;
-const SEGMENTS = 220;
+const SEGMENTS = 300;
 
 // Applies the moon color texture to the shared material ref. Isolated so a
 // texture load failure (e.g. Vercel SSO redirect returning HTML instead of
@@ -20,9 +20,9 @@ function MoonTextureApplier({
 }) {
   const colorMap = useTexture("/textures/moon/color.jpg", (loaded) => {
     const tex = loaded as THREE.Texture;
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(34, 34);
+    tex.wrapS = THREE.MirroredRepeatWrapping;
+    tex.wrapT = THREE.MirroredRepeatWrapping;
+    tex.repeat.set(44, 44);
     tex.anisotropy = 16;
     tex.needsUpdate = true;
   });
@@ -34,7 +34,7 @@ function MoonTextureApplier({
       // Reuse the color map as a bump map — cheap micro-relief that makes
       // the regolith catch the low sun instead of reading as flat paint.
       mat.bumpMap = colorMap;
-      mat.bumpScale = 0.5;
+      mat.bumpScale = 0.3;
       mat.needsUpdate = true;
     }
   }, [colorMap, materialRef]);
@@ -83,4 +83,3 @@ export function MoonSurface() {
     </>
   );
 }
-
