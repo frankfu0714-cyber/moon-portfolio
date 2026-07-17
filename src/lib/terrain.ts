@@ -95,8 +95,8 @@ export function sampleTerrainHeight(x: number, z: number) {
     WALKABLE_R * 0.5,
     WALKABLE_R * 1.8,
   );
-  const base = (fbm(x * 0.03, z * 0.03) - 0.5) * 2.5;
-  const detail = (fbm(x * 0.12, z * 0.12) - 0.5) * 0.5;
+  const base = (fbm(x * 0.03, z * 0.03) - 0.5) * 1.5;
+  const detail = (fbm(x * 0.12, z * 0.12) - 0.5) * 0.35;
   let h = base * nearBias + detail * 0.6;
 
   const flatFalloff = THREE.MathUtils.smoothstep(d, 3, WALKABLE_R * 0.7);
@@ -137,4 +137,3 @@ export function sampleSlope(x: number, z: number, h = 0.5) {
     dz: (hzp - hzn) / (2 * h),
   };
 }
-
