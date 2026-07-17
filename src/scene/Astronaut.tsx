@@ -10,6 +10,7 @@ import {
 import { useFrame } from "@react-three/fiber";
 import { useAnimations, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
+import { clone as cloneWithSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 export type AstronautHandle = {
   group: THREE.Group | null;
@@ -61,10 +62,14 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   // only one, but cloning is cheap and keeps us safe against StrictMode
   // double-mount stealing the skeleton from the cached scene.
   //
-  // NOTE: SkeletonUtils.clone would be more correct for skinned meshes with
-  // shared skeletons, but for this single-instance use `scene.clone(true)`
-  // preserves the bones enough for the mixer to bind to `clipRoot`.
-  const clonedScene = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
+  // SkeletonUtils.clone rebinds every SkinnedMesh to the CLONED bone
+  // hierarchy. A plain `scene.clone(true)` leaves the cloned meshes bound to
+  // the ORIGINAL skeleton, so the mixer animates bones nobody is skinned to
+  // and the astronaut renders as a frozen statue gliding over the terrain.
+  const clonedScene = useMemo(
+    () => cloneWithSkeleton(gltf.scene) as THREE.Group,
+    [gltf.scene],
+  );
 
   // Strip root-translation tracks from every clip before we hand them to the
   // mixer. Quaternius' Walk and Run clips include baked hip/root position
@@ -238,6 +243,17 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
         : currentAnim.current === "walk"
           ? actions[CLIP_WALK]
           : null;
+    // Match playback rate to actual ground speed so the feet never slide:
+    // at nominal speed the clip runs at 1x, slower/faster scales with it.
+    if (activeAction) {
+      const nominal = currentAnim.current === "run" ? 2.6 : 1.2;
+      activeAction.timeScale = THREE.MathUtils.clamp(
+        speed / nominal,
+        0.55,
+        1.45,
+      );
+    }
+
     if (activeAction && onFootstep) {
       const clipLen = activeAction.getClip().duration || 1;
       const cycle = activeAction.time / clipLen; // 0..1
