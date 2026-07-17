@@ -5,6 +5,7 @@ export type WalkInput = {
   forward: number; // -1..1
   strafe: number; // -1..1
   running: boolean; // shift-modifier — bumps the speed cap for a jog
+  jumping: boolean; // space — low-gravity hop
 };
 
 type State = {
@@ -31,7 +32,7 @@ export const useSceneStore = create<State & Actions>((set) => ({
   muted: true,
   activePanel: null,
   nearWaypoint: null,
-  walkInput: { forward: 0, strafe: 0, running: false },
+  walkInput: { forward: 0, strafe: 0, running: false, jumping: false },
   moving: false,
   setReady: (ready) => set({ ready }),
   toggleMute: () => set((s) => ({ muted: !s.muted })),
@@ -41,3 +42,4 @@ export const useSceneStore = create<State & Actions>((set) => ({
   setWalkInput: (walkInput) => set({ walkInput }),
   setMoving: (moving) => set({ moving }),
 }));
+
