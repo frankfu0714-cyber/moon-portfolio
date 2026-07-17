@@ -76,13 +76,13 @@ export function HUD() {
       {/* Asset credit — bottom right, near-invisible until hovered */}
       <div className="fixed bottom-3 right-3 z-30 no-select">
         <a
-          href="https://poly.pizza/m/dLHpzNdygsg"
+          href="https://sketchfab.com/3d-models/astronaut-d5a16f7ec11c4b1d876059cbf6adbf56"
           target="_blank"
           rel="noopener noreferrer"
-          title={'"Astronaut" by Poly by Google (CC-BY), via model-viewer shared assets'}
+          title={'Astronaut model from Sketchfab (CC-BY 4.0) · animations by Mixamo'}
           className="block text-[9px] tracking-[0.15em] uppercase opacity-25 hover:opacity-70 transition-opacity"
         >
-          astronaut · Poly by Google · CC-BY
+          astronaut · Sketchfab · CC-BY 4.0
         </a>
       </div>
     </>
