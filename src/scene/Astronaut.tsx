@@ -71,28 +71,27 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     [gltf.scene],
   );
 
-  // Repaint the Quaternius sci-fi suit as a classic white NASA suit with a
-  // gold visor. The GLB ships flat-colored materials (no textures), so a
-  // straight palette swap by material name is safe. Materials are cloned
-  // before mutation so the shared useGLTF cache keeps its original colors.
+  // Repaint the Quaternius sci-fi suit as a NASA "pumpkin suit" orange
+  // explorer: bright orange shell, white gloves/boots/trim, dark visor.
+  // The GLB ships flat-colored materials (no textures), so a straight
+  // palette swap by material name is safe. Materials are cloned before
+  // mutation so the shared useGLTF cache keeps its original colors.
   useMemo(() => {
     const palette: Record<string, Partial<THREE.MeshStandardMaterial>> = {
-      // Main suit shell - warm white fabric.
-      SciFi_Main: { color: new THREE.Color("#e9e7e0"), roughness: 0.75, metalness: 0.02 },
-      // Under-suit / joints - soft light gray.
-      SciFi_MainDark: { color: new THREE.Color("#b9bdc4"), roughness: 0.7, metalness: 0.05 },
+      // Main suit shell - pumpkin orange fabric.
+      SciFi_Main: { color: new THREE.Color("#e8712a"), roughness: 0.72, metalness: 0.02 },
+      // Under-suit / joints - deep rust so the seams read as harness straps.
+      SciFi_MainDark: { color: new THREE.Color("#8f3f16"), roughness: 0.7, metalness: 0.05 },
       // Trim panels - bright white.
       SciFi_Light: { color: new THREE.Color("#f4f2ec"), roughness: 0.6, metalness: 0.05 },
-      // Accents - gold visor tone (was rust orange).
+      // Accents (boots / helmet stripes) - clean white, no more gold.
       SciFi_Light_Accent: {
-        color: new THREE.Color("#d9a441"),
-        roughness: 0.3,
-        metalness: 0.65,
-        emissive: new THREE.Color("#4a3208"),
-        emissiveIntensity: 0.35,
+        color: new THREE.Color("#f2f0ea"),
+        roughness: 0.55,
+        metalness: 0.05,
       },
-      // Visor glass / dark hardware.
-      Grey: { color: new THREE.Color("#2e3138"), roughness: 0.35, metalness: 0.4 },
+      // Visor glass / dark hardware - near-black with a glassy sheen.
+      Grey: { color: new THREE.Color("#15171c"), roughness: 0.2, metalness: 0.55 },
     };
     clonedScene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
