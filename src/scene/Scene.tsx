@@ -32,10 +32,10 @@ export function Scene() {
   return (
     <Canvas
       dpr={[1, 1.5]}
-      shadows={false}
+      shadows
       gl={{ antialias: true, powerPreference: "high-performance" }}
       onCreated={({ gl }) => {
-        gl.setClearColor("#05060a", 1);
+        gl.setClearColor("#020308", 1);
       }}
     >
       <PerspectiveCamera
@@ -46,7 +46,9 @@ export function Scene() {
         position={[0, 3.2, -6.5]}
       />
 
-      <fog attach="fog" args={["#0b0e14", 60, 300]} />
+      {/* Crisper horizon: fog starts far out and only softens the very
+          edge of the terrain disc. */}
+      <fog attach="fog" args={["#04050a", 100, 380]} />
 
       {/* HDR environment lighting is nice-to-have. On production behind
           Vercel SSO the .hdr fetch redirects to an HTML login page, which
@@ -56,28 +58,39 @@ export function Scene() {
         <Environment files="/hdri-space.hdr" background={false} />
       </SafeAsset>
 
-      {/* Stark, high-contrast lunar lighting: one strong warm sun, a faint
-          cool bounce, and just enough ambient to keep shadows readable. */}
-      <hemisphereLight args={["#bcd0f5", "#4a4238", 0.5]} />
+      {/* Cinematic lunar lighting: one hard low sun that casts real
+          shadows (rocks + astronaut), almost no fill — deep black shadow
+          sides like the reference footage. */}
+      <hemisphereLight args={["#aebfe0", "#3a352d", 0.3]} />
       <directionalLight
-        position={[30, 40, 10]}
-        intensity={2.6}
-        color="#fff6e6"
+        position={[45, 26, -18]}
+        intensity={3.4}
+        color="#fff4e0"
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-left={-75}
+        shadow-camera-right={75}
+        shadow-camera-top={75}
+        shadow-camera-bottom={-75}
+        shadow-camera-near={5}
+        shadow-camera-far={250}
+        shadow-bias={-0.0004}
       />
       <directionalLight
         position={[-20, 12, -30]}
-        intensity={0.35}
+        intensity={0.22}
         color="#7fb3ff"
       />
-      <ambientLight intensity={0.22} color="#9db2d8" />
+      <ambientLight intensity={0.14} color="#93a8cf" />
 
       <Stars
-        radius={220}
-        depth={80}
-        count={6500}
-        factor={4}
+        radius={230}
+        depth={90}
+        count={9000}
+        factor={4.5}
         fade
-        speed={0.12}
+        speed={0.1}
       />
 
       {/* MoonSurface & EarthInSky each self-guard their texture fetch with
@@ -106,12 +119,12 @@ export function Scene() {
       <SafeAsset label="post">
         <EffectComposer multisampling={0} enableNormalPass={false}>
           <Bloom
-            intensity={0.7}
-            luminanceThreshold={0.55}
+            intensity={0.85}
+            luminanceThreshold={0.5}
             luminanceSmoothing={0.25}
             mipmapBlur
           />
-          <Vignette eskil={false} offset={0.15} darkness={0.7} />
+          <Vignette eskil={false} offset={0.18} darkness={0.75} />
         </EffectComposer>
       </SafeAsset>
     </Canvas>
