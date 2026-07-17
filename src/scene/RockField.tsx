@@ -13,7 +13,7 @@ function makeRock(seed: number): THREE.BufferGeometry {
   // Dense indexed sphere: indexed geometry gives smooth vertex normals
   // (the old icosahedron was non-indexed, so every triangle rendered as a
   // flat facet), and 64x48 segments carry fine surface detail.
-  const geom = new THREE.SphereGeometry(1, 64, 48);
+  const geom = new THREE.SphereGeometry(1, 96, 64);
   const pos = geom.attributes.position as THREE.BufferAttribute;
   const v = new THREE.Vector3();
   const colors = new Float32Array(pos.count * 3);
@@ -21,6 +21,21 @@ function makeRock(seed: number): THREE.BufferGeometry {
   const ox = seed * 13.7;
   const oy = seed * 27.1;
   const oz = seed * 41.3;
+
+  // Random fracture planes: vertices poking past a plane get projected
+  // back onto it, which slices flat "chip" facets with crisp edges into
+  // the boulder -- the way real broken basalt looks.
+  const cuts: { n: THREE.Vector3; d: number }[] = [];
+  const cutCount = 5 + Math.floor(seededRand(seed + 51) * 3);
+  for (let k = 0; k < cutCount; k++) {
+    const u = seededRand(seed * 7.3 + k * 13.1) * 2 - 1;
+    const th = seededRand(seed * 11.7 + k * 17.9) * Math.PI * 2;
+    const rr = Math.sqrt(Math.max(0, 1 - u * u));
+    cuts.push({
+      n: new THREE.Vector3(rr * Math.cos(th), u, rr * Math.sin(th)),
+      d: 0.55 + seededRand(seed * 3.1 + k * 29.3) * 0.28,
+    });
+  }
 
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
@@ -37,23 +52,30 @@ function makeRock(seed: number): THREE.BufferGeometry {
       const s2 = fbm((v.y + oy) * freq, (v.z + oz) * freq);
       const s3 = fbm((v.z + oz) * freq, (v.x + ox) * freq);
       let n = (s1 + s2 + s3) / 3 - 0.5;
-      // From the 3rd octave up, fold the noise into sharp ridges so the
-      // surface reads as chipped, craggy regolith rock instead of a
-      // polished pebble.
-      if (o >= 2) {
-        n = (0.5 - Math.abs(n) * 2) * 0.55;
+      // Fold the mid/high octaves into sharp ridges so the surface reads
+      // as chipped, craggy rock instead of a polished pebble.
+      if (o >= 1) {
+        n = (0.5 - Math.abs(n) * 2) * 0.72;
       }
       disp += amp * n;
       norm += amp;
-      amp *= 0.58;
+      amp *= 0.62;
       freq *= 2.15;
     }
     disp /= norm;
 
     // Scale each vertex outward/inward by the local noise. Amount varies
     // per rock so silhouettes differ.
-    const perRockGain = 0.75 + seededRand(seed + 3) * 0.5;
+    const perRockGain = 0.95 + seededRand(seed + 3) * 0.5;
     v.multiplyScalar(1 + disp * perRockGain);
+
+    // Slice the fracture planes.
+    for (const cut of cuts) {
+      const pd = v.dot(cut.n);
+      if (pd > cut.d) {
+        v.addScaledVector(cut.n, cut.d - pd);
+      }
+    }
 
     // Flatten the underside so the rock reads as sitting on the ground
     // rather than a floating boulder.
@@ -63,7 +85,7 @@ function makeRock(seed: number): THREE.BufferGeometry {
 
     // Bake crevice shading into vertex colors: recessed areas darken,
     // ridges stay bright. Multiplies with the material color.
-    const shade = THREE.MathUtils.clamp(0.72 + disp * 2.2, 0.35, 1);
+    const shade = THREE.MathUtils.clamp(0.68 + disp * 2.6, 0.3, 1);
     colors[i * 3] = shade;
     colors[i * 3 + 1] = shade;
     colors[i * 3 + 2] = shade;
