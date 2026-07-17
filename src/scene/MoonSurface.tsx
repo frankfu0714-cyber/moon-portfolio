@@ -34,7 +34,7 @@ function MoonTextureApplier({
       // Reuse the color map as a bump map — cheap micro-relief that makes
       // the regolith catch the low sun instead of reading as flat paint.
       mat.bumpMap = colorMap;
-      mat.bumpScale = 0.22;
+      mat.bumpScale = 0.18;
       mat.needsUpdate = true;
     }
   }, [colorMap, materialRef]);
@@ -64,7 +64,7 @@ export function MoonSurface() {
       <mesh geometry={geometry} receiveShadow>
         <meshStandardMaterial
           ref={materialRef}
-          color="#8f8878"
+          color="#cfccc2"
           roughness={0.98}
           metalness={0}
         />
