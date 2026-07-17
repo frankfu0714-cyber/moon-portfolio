@@ -12,12 +12,14 @@ import * as THREE from "three";
 
 // Capacity — enough for several bursts overlapping at max walk speed
 // (~1.8 Hz cycle × 2 halves × 12 particles × 0.8s lifetime ≈ 35 concurrent).
-const CAPACITY = 96;
-const LIFETIME = 0.8;
+const CAPACITY = 224;
+const GRAVITY = 0.22; // lunar dust settles slowly
 
 type Particle = {
   active: boolean;
   age: number;
+  life: number;
+  grow: number;
   x: number;
   y: number;
   z: number;
@@ -29,6 +31,7 @@ type Particle = {
 export type DustPuffsHandle = {
   puff: (x: number, y: number, z: number) => void;
   ambient: (x: number, y: number, z: number) => void;
+  landing: (x: number, y: number, z: number, strength: number) => void;
 };
 
 function makeDustTexture() {
@@ -66,6 +69,8 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
       Array.from({ length: CAPACITY }, () => ({
         active: false,
         age: 0,
+        life: 1,
+        grow: 1,
         x: 0,
         y: 0,
         z: 0,
@@ -100,23 +105,52 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
     };
   }, [geometry, texture]);
 
-  const spawn = (x: number, y: number, z: number, burst: boolean) => {
-    const count = burst ? 8 + Math.floor(Math.random() * 5) : 1;
+  // kind: footstep kick, ambient wisp, or landing burst.
+  const spawn = (
+    x: number,
+    y: number,
+    z: number,
+    kind: "step" | "ambient" | "burst",
+    strength = 1,
+  ) => {
+    const count =
+      kind === "burst"
+        ? Math.round((20 + Math.random() * 8) * strength)
+        : kind === "step"
+          ? 10 + Math.floor(Math.random() * 5)
+          : 1;
     for (let n = 0; n < count; n++) {
       const idx = nextIndex.current;
       const p = particles[idx];
       p.active = true;
       p.age = 0;
-      const jitterR = burst ? 0.12 : 0.08;
+      const jitterR = kind === "burst" ? 0.22 : kind === "step" ? 0.14 : 0.08;
       const jTheta = Math.random() * Math.PI * 2;
       p.x = x + Math.cos(jTheta) * jitterR * Math.random();
       p.z = z + Math.sin(jTheta) * jitterR * Math.random();
-      p.y = y + 0.02 + Math.random() * 0.03;
-      const outward = burst ? 0.35 + Math.random() * 0.5 : 0.05;
-      const upward = burst ? 0.35 + Math.random() * 0.5 : 0.12;
+      p.y = y + 0.02 + Math.random() * 0.04;
+      const outward =
+        kind === "burst"
+          ? (0.55 + Math.random() * 0.75) * strength
+          : kind === "step"
+            ? 0.28 + Math.random() * 0.5
+            : 0.05;
+      const upward =
+        kind === "burst"
+          ? 0.4 + Math.random() * 0.55
+          : kind === "step"
+            ? 0.3 + Math.random() * 0.45
+            : 0.12;
       p.vx = Math.cos(jTheta) * outward;
       p.vz = Math.sin(jTheta) * outward;
       p.vy = upward;
+      p.life =
+        kind === "burst"
+          ? 1.5 + Math.random() * 0.5
+          : kind === "step"
+            ? 0.9 + Math.random() * 0.35
+            : 1.3;
+      p.grow = kind === "burst" ? 1.5 : kind === "step" ? 1 : 0.7;
       nextIndex.current = (nextIndex.current + 1) % CAPACITY;
     }
   };
@@ -125,10 +159,13 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
     ref,
     () => ({
       puff(x, y, z) {
-        spawn(x, y, z, true);
+        spawn(x, y, z, "step");
       },
       ambient(x, y, z) {
-        spawn(x, y, z, false);
+        spawn(x, y, z, "ambient");
+      },
+      landing(x, y, z, strength) {
+        spawn(x, y, z, "burst", strength);
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -146,7 +183,7 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
         continue;
       }
       p.age += delta;
-      const t = p.age / LIFETIME;
+      const t = p.age / p.life;
       if (t >= 1) {
         p.active = false;
         alphas[i] = 0;
@@ -154,20 +191,20 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
         positions[i * 3 + 1] = -1000;
         continue;
       }
-      const drag = 1 - t * 0.85;
+      const drag = 1 - t * 0.8;
       p.x += p.vx * drag * delta;
       p.z += p.vz * drag * delta;
       p.y += p.vy * drag * delta;
-      p.vy -= 0.4 * delta;
+      p.vy -= GRAVITY * delta;
 
       positions[i * 3] = p.x;
       positions[i * 3 + 1] = p.y;
       positions[i * 3 + 2] = p.z;
 
-      const fadeIn = Math.min(t / 0.15, 1);
-      const fadeOut = 1 - Math.max((t - 0.15) / 0.85, 0);
-      alphas[i] = 0.65 * fadeIn * fadeOut;
-      sizes[i] = 0.03 + t * 0.12;
+      const fadeIn = Math.min(t / 0.12, 1);
+      const fadeOut = 1 - Math.max((t - 0.12) / 0.88, 0);
+      alphas[i] = 0.55 * fadeIn * fadeOut * fadeOut;
+      sizes[i] = (0.04 + t * 0.26) * p.grow;
     }
 
     geometry.attributes.position.needsUpdate = true;
@@ -212,3 +249,4 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
     </points>
   );
 });
+
