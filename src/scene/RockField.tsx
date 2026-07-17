@@ -30,22 +30,29 @@ function makeRock(seed: number): THREE.BufferGeometry {
     // fine regolith-like granularity.
     let disp = 0;
     let amp = 1;
-    let freq = 1.3;
+    let freq = 1.1;
     let norm = 0;
-    for (let o = 0; o < 5; o++) {
+    for (let o = 0; o < 6; o++) {
       const s1 = fbm((v.x + ox) * freq, (v.y + oy) * freq);
       const s2 = fbm((v.y + oy) * freq, (v.z + oz) * freq);
       const s3 = fbm((v.z + oz) * freq, (v.x + ox) * freq);
-      disp += amp * ((s1 + s2 + s3) / 3 - 0.5);
+      let n = (s1 + s2 + s3) / 3 - 0.5;
+      // From the 3rd octave up, fold the noise into sharp ridges so the
+      // surface reads as chipped, craggy regolith rock instead of a
+      // polished pebble.
+      if (o >= 2) {
+        n = (0.5 - Math.abs(n) * 2) * 0.55;
+      }
+      disp += amp * n;
       norm += amp;
-      amp *= 0.45;
-      freq *= 2.3;
+      amp *= 0.58;
+      freq *= 2.15;
     }
     disp /= norm;
 
     // Scale each vertex outward/inward by the local noise. Amount varies
     // per rock so silhouettes differ.
-    const perRockGain = 0.55 + seededRand(seed + 3) * 0.4;
+    const perRockGain = 0.75 + seededRand(seed + 3) * 0.5;
     v.multiplyScalar(1 + disp * perRockGain);
 
     // Flatten the underside so the rock reads as sitting on the ground
@@ -56,7 +63,7 @@ function makeRock(seed: number): THREE.BufferGeometry {
 
     // Bake crevice shading into vertex colors: recessed areas darken,
     // ridges stay bright. Multiplies with the material color.
-    const shade = THREE.MathUtils.clamp(0.78 + disp * 1.4, 0.5, 1);
+    const shade = THREE.MathUtils.clamp(0.72 + disp * 2.2, 0.35, 1);
     colors[i * 3] = shade;
     colors[i * 3 + 1] = shade;
     colors[i * 3 + 2] = shade;
@@ -105,7 +112,7 @@ export function RockField() {
           >
             <meshStandardMaterial
               color={r.color}
-              roughness={0.92}
+              roughness={0.96}
               metalness={0}
               vertexColors
             />
