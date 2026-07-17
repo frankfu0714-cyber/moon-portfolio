@@ -15,7 +15,7 @@ const DAY_MAP_URL =
 const LIGHTS_MAP_URL =
   "https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/textures/planets/earth_lights_2048.png";
 
-const EARTH_R = 34;
+const EARTH_R = 38;
 
 function EarthTextureApplier({
   materialRef,
@@ -41,10 +41,10 @@ function EarthTextureApplier({
       // while the emissive lights map paints the warm city grid on top —
       // matching the reference frame (dark globe, glowing cities).
       mat.map = dayMap;
-      mat.color = new THREE.Color("#5f7ba6");
+      mat.color = new THREE.Color("#6d8fc2");
       mat.emissiveMap = lightsMap;
-      mat.emissive = new THREE.Color("#ffd9a0");
-      mat.emissiveIntensity = 1.35;
+      mat.emissive = new THREE.Color("#ffb066");
+      mat.emissiveIntensity = 2.1;
       mat.roughness = 1;
       mat.needsUpdate = true;
     }
@@ -69,7 +69,7 @@ export function EarthInSky() {
   });
 
   return (
-    <group position={[10, 26, 225]}>
+    <group position={[14, 88, 235]}>
       <group ref={groupRef} rotation={[0.15, 2.6, 0]}>
         <mesh castShadow={false} receiveShadow={false}>
           <sphereGeometry args={[EARTH_R, 64, 64]} />
@@ -128,3 +128,4 @@ export function EarthInSky() {
     </group>
   );
 }
+
