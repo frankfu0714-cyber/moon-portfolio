@@ -41,7 +41,8 @@ function EarthTextureApplier({
 
 // A big cinematic Earth hanging over the horizon — the "walking on the Moon
 // looking back home" shot. Positioned on the +z side so it sits in the
-// DEFAULT camera view at spawn (camera starts at z≈-6.5 looking toward +z).
+// DEFAULT camera view at spawn (camera starts at z≈-6.5 looking toward +z),
+// low enough that the full disc floats just above the horizon.
 // `fog={false}` everywhere: scene fog would otherwise swallow it.
 const EARTH_R = 34;
 
@@ -61,7 +62,7 @@ export function EarthInSky() {
   });
 
   return (
-    <group position={[22, 62, 225]}>
+    <group position={[22, 40, 225]}>
       <group ref={groupRef}>
         <mesh castShadow={false} receiveShadow={false}>
           <sphereGeometry args={[EARTH_R, 64, 64]} />
