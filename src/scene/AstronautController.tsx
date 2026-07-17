@@ -21,6 +21,20 @@ const ACCEL = 4;
 const DAMP = 6;
 const TURN_LERP = 6;
 
+// Low-gravity hop. Real lunar g would float ~4s — this is tuned for game
+// feel: ~1.2s airtime, ~0.9 units apex.
+const JUMP_SPEED = 3.1;
+const GRAVITY = 5.2;
+
+// Keep the astronaut on the detailed part of the terrain cap, well away
+// from where the curvature drop-off gets steep.
+const WALK_BOUND = 120;
+
+// Lander footprint (must match LANDER_X/Z in Scene.tsx).
+const LANDER_X = 10;
+const LANDER_Z = 16;
+const LANDER_RADIUS = 3.6;
+
 // Terrain-following.
 const FOOT_OFFSET = 0.02;
 const HEIGHT_LERP = 0.15; // per-frame low-pass; kills crater-rim jitter
@@ -46,6 +60,8 @@ export function AstronautController() {
   const heading = useRef(0);
   const targetHeading = useRef(0);
   const idleDustTimer = useRef(0);
+  const vy = useRef(0);
+  const airborne = useRef(false);
   const speedCap = useRef(WALK_SPEED);
   const runBlend = useRef(0); // 0 = walk, 1 = run — smooths camera + anim
   const camPos = useRef(new THREE.Vector3(0, CAM_HEIGHT, -CAM_DISTANCE));
@@ -134,12 +150,65 @@ export function AstronautController() {
     // angle slides you along its flank instead of stopping you dead.
     resolveRockCollision(astronaut.position);
 
+    // The lander is solid too — same circle push-out as the rocks.
+    {
+      const ldx = astronaut.position.x - LANDER_X;
+      const ldz = astronaut.position.z - LANDER_Z;
+      const ld = Math.hypot(ldx, ldz);
+      if (ld < LANDER_RADIUS && ld > 1e-5) {
+        const push = (LANDER_RADIUS - ld) / ld;
+        astronaut.position.x += ldx * push;
+        astronaut.position.z += ldz * push;
+      }
+    }
+
+    // Soft world boundary — beyond this the curvature falls away fast.
+    {
+      const distO = Math.hypot(astronaut.position.x, astronaut.position.z);
+      if (distO > WALK_BOUND) {
+        const s = WALK_BOUND / distO;
+        astronaut.position.x *= s;
+        astronaut.position.z *= s;
+      }
+    }
+
     // Sample the surface and low-pass toward it so the astronaut tracks
     // crater rims and dunes without jitter on high-frequency vertices.
     const targetY =
       sampleTerrainHeight(astronaut.position.x, astronaut.position.z) +
       FOOT_OFFSET;
-    astronaut.position.y += (targetY - astronaut.position.y) * HEIGHT_LERP;
+
+    // Low-gravity jump: Space launches, a simple ballistic arc brings the
+    // astronaut back to the sampled terrain height.
+    if (!airborne.current && inputActive && walkInput.jumping) {
+      airborne.current = true;
+      vy.current = JUMP_SPEED;
+      astronaut.position.y = Math.max(astronaut.position.y, targetY);
+      dustRef.current?.puff(
+        astronaut.position.x,
+        targetY - FOOT_OFFSET,
+        astronaut.position.z,
+      );
+    }
+    if (airborne.current) {
+      vy.current -= GRAVITY * dt;
+      astronaut.position.y += vy.current * dt;
+      if (vy.current <= 0 && astronaut.position.y <= targetY) {
+        astronaut.position.y = targetY;
+        airborne.current = false;
+        const impact = 1 + Math.min(-vy.current * 0.3, 1.2);
+        dustRef.current?.landing(
+          astronaut.position.x,
+          targetY - FOOT_OFFSET,
+          astronaut.position.z,
+          impact,
+        );
+        vy.current = 0;
+      }
+    } else {
+      astronaut.position.y += (targetY - astronaut.position.y) * HEIGHT_LERP;
+    }
+    astronaut.userData.airborne = airborne.current;
 
     // Report speed to the astronaut mesh for animation blending.
     const speedSq =
@@ -281,6 +350,7 @@ export function AstronautController() {
   });
 
   const handleFootstep = (pos: THREE.Vector3) => {
+    if (airborne.current) return; // no footfalls mid-air
     dustRef.current?.puff(pos.x, pos.y - FOOT_OFFSET, pos.z);
   };
 
@@ -307,3 +377,4 @@ function dampAngle(current: number, target: number, lambda: number, dt: number) 
   const eased = THREE.MathUtils.damp(0, delta, lambda, dt);
   return current + eased;
 }
+
