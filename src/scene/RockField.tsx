@@ -50,7 +50,7 @@ function makeRock(seed: number): THREE.BufferGeometry {
 
     // Flatten the underside so the rock reads as sitting on the ground
     // rather than a floating boulder.
-    if (v.y < 0) v.y *= 0.6;
+    if (v.y < 0) v.y *= 0.38;
 
     pos.setXYZ(i, v.x, v.y, v.z);
 
@@ -92,7 +92,7 @@ export function RockField() {
             ),
           );
         }
-        const y = ground + r.scaleY * 0.3;
+        const y = ground - r.scaleY * 0.05;
         return (
           <mesh
             key={i}
