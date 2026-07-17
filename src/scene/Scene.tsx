@@ -56,27 +56,28 @@ export function Scene() {
         <Environment files="/hdri-space.hdr" background={false} />
       </SafeAsset>
 
-      {/* Baseline lighting that renders the scene even without the HDR. */}
-      <hemisphereLight args={["#a9c4ff", "#3b2a1a", 0.55]} />
+      {/* Stark, high-contrast lunar lighting: one strong warm sun, a faint
+          cool bounce, and just enough ambient to keep shadows readable. */}
+      <hemisphereLight args={["#a9c4ff", "#3b2a1a", 0.38]} />
       <directionalLight
         position={[30, 40, 10]}
-        intensity={1.8}
-        color="#fff5e0"
+        intensity={2.2}
+        color="#fff3dc"
       />
       <directionalLight
         position={[-20, 12, -30]}
-        intensity={0.4}
+        intensity={0.35}
         color="#7fb3ff"
       />
-      <ambientLight intensity={0.25} color="#8fa8d6" />
+      <ambientLight intensity={0.16} color="#8fa8d6" />
 
       <Stars
         radius={220}
         depth={80}
-        count={4000}
-        factor={3.5}
+        count={6500}
+        factor={4}
         fade
-        speed={0.4}
+        speed={0.12}
       />
 
       {/* MoonSurface & EarthInSky each self-guard their texture fetch with
