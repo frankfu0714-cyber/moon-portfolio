@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
+import * as THREE from "three";
 import { Environment, PerspectiveCamera, Stars } from "@react-three/drei";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import { AstronautController } from "./AstronautController";
@@ -10,10 +11,98 @@ import { EarthInSky } from "./EarthInSky";
 import { WaypointFlag } from "./WaypointFlag";
 import { SafeAsset } from "./SafeAsset";
 import { WAYPOINTS } from "@/lib/waypoints";
+import { sampleTerrainHeight } from "@/lib/terrain";
 
 // Simple heartbeat that logs a frame count once a second. Proves the R3F
 // render loop is alive on production — if this stops logging, the tick
 // died (Timer/Clock issue, throw in a useFrame, tab throttling, etc.).
+
+// Apollo-style lunar module, fully procedural: gold-foil octagonal descent
+// stage, silver ascent stage, four splayed legs with pads. Parked just off
+// the spawn path; the controller keeps the astronaut outside its footprint.
+const LANDER_X = 10;
+const LANDER_Z = 16;
+
+function MoonLander() {
+  const baseY = sampleTerrainHeight(LANDER_X, LANDER_Z);
+  const legs = [0, 1, 2, 3].map((i) => (i * Math.PI) / 2 + Math.PI / 4);
+  return (
+    <group position={[LANDER_X, baseY + 1.42, LANDER_Z]} rotation={[0, 0.6, 0]}>
+      {/* Descent stage — gold foil octagon */}
+      <mesh castShadow>
+        <cylinderGeometry args={[2.0, 2.2, 1.25, 8]} />
+        <meshStandardMaterial
+          color="#d9a441"
+          metalness={0.75}
+          roughness={0.35}
+          flatShading
+        />
+      </mesh>
+      {/* Engine bell */}
+      <mesh position={[0, -0.95, 0]} castShadow>
+        <cylinderGeometry args={[0.32, 0.75, 0.7, 24]} />
+        <meshStandardMaterial color="#3a3a3e" metalness={0.9} roughness={0.4} />
+      </mesh>
+      {/* Legs */}
+      {legs.map((a, i) => (
+        <group key={i} rotation={[0, a, 0]}>
+          <mesh position={[2.6, -0.68, 0]} rotation={[0, 0, 0.8]} castShadow>
+            <cylinderGeometry args={[0.055, 0.075, 1.95, 8]} />
+            <meshStandardMaterial color="#c8c9cc" metalness={0.8} roughness={0.35} />
+          </mesh>
+          <mesh position={[2.45, -0.98, 0]} rotation={[0, 0, 1.18]} castShadow>
+            <cylinderGeometry args={[0.03, 0.03, 1.2, 6]} />
+            <meshStandardMaterial color="#9d9fa3" metalness={0.8} roughness={0.4} />
+          </mesh>
+          <mesh position={[3.3, -1.38, 0]} castShadow>
+            <cylinderGeometry args={[0.5, 0.62, 0.14, 16]} />
+            <meshStandardMaterial color="#d9a441" metalness={0.7} roughness={0.4} />
+          </mesh>
+        </group>
+      ))}
+      {/* Ascent stage — silver */}
+      <group position={[0, 1.28, 0]}>
+        <mesh castShadow>
+          <cylinderGeometry args={[1.05, 1.35, 1.05, 8]} />
+          <meshStandardMaterial
+            color="#d7dade"
+            metalness={0.85}
+            roughness={0.3}
+            flatShading
+          />
+        </mesh>
+        <mesh position={[0, 0.72, 0]} castShadow>
+          <cylinderGeometry args={[0.55, 1.0, 0.5, 8]} />
+          <meshStandardMaterial
+            color="#c2c6cc"
+            metalness={0.85}
+            roughness={0.32}
+            flatShading
+          />
+        </mesh>
+        {/* Windows */}
+        <mesh position={[-0.5, 0.2, -1.08]} rotation={[0, -0.35, 0]}>
+          <boxGeometry args={[0.3, 0.34, 0.06]} />
+          <meshStandardMaterial color="#0c0e12" roughness={0.2} metalness={0.6} />
+        </mesh>
+        <mesh position={[0.5, 0.2, -1.08]} rotation={[0, 0.35, 0]}>
+          <boxGeometry args={[0.3, 0.34, 0.06]} />
+          <meshStandardMaterial color="#0c0e12" roughness={0.2} metalness={0.6} />
+        </mesh>
+        {/* Antenna */}
+        <mesh position={[0.55, 1.3, 0.25]} castShadow>
+          <cylinderGeometry args={[0.02, 0.02, 0.8, 6]} />
+          <meshStandardMaterial color="#c8c9cc" metalness={0.8} roughness={0.4} />
+        </mesh>
+        <mesh position={[0.55, 1.72, 0.25]} scale={[1, 0.4, 1]} castShadow>
+          <sphereGeometry args={[0.2, 16, 12]} />
+          <meshStandardMaterial color="#d9a441" metalness={0.75} roughness={0.35} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
 function FrameLoopHeartbeat() {
   const frames = useRef(0);
   const lastLog = useRef(0);
@@ -67,14 +156,14 @@ export function Scene() {
         intensity={3.4}
         color="#fff4e0"
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-left={-75}
-        shadow-camera-right={75}
-        shadow-camera-top={75}
-        shadow-camera-bottom={-75}
+        shadow-mapSize-width={4096}
+        shadow-mapSize-height={4096}
+        shadow-camera-left={-100}
+        shadow-camera-right={100}
+        shadow-camera-top={100}
+        shadow-camera-bottom={-100}
         shadow-camera-near={5}
-        shadow-camera-far={250}
+        shadow-camera-far={300}
         shadow-bias={-0.0004}
       />
       <directionalLight
@@ -86,9 +175,9 @@ export function Scene() {
 
       <Stars
         radius={230}
-        depth={90}
-        count={9000}
-        factor={4.5}
+        depth={120}
+        count={16000}
+        factor={5}
         fade
         speed={0.1}
       />
@@ -103,6 +192,30 @@ export function Scene() {
       <SafeAsset label="earth">
         <EarthInSky />
       </SafeAsset>
+
+      <SafeAsset label="lander">
+        <MoonLander />
+      </SafeAsset>
+
+      {/* Visible sun — sits along the key light's direction (10x the light
+          position) so every shadow in the scene points away from it. The
+          disc is tone-mapping-exempt so Bloom flares it hard. */}
+      <mesh position={[450, 260, -180]}>
+        <sphereGeometry args={[22, 32, 32]} />
+        <meshBasicMaterial color="#fffbe8" fog={false} toneMapped={false} />
+      </mesh>
+      <mesh position={[450, 260, -180]}>
+        <sphereGeometry args={[36, 32, 32]} />
+        <meshBasicMaterial
+          color="#ffe9a8"
+          transparent
+          opacity={0.2}
+          fog={false}
+          toneMapped={false}
+          depthWrite={false}
+          side={THREE.BackSide}
+        />
+      </mesh>
 
       {WAYPOINTS.map((w) => (
         <WaypointFlag key={w.id} waypoint={w} />
@@ -130,3 +243,4 @@ export function Scene() {
     </Canvas>
   );
 }
+
