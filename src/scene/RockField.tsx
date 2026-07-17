@@ -10,9 +10,13 @@ import { ROCKS, VARIANT_COUNT, seededRand } from "@/lib/rocks";
 // Displacement uses the same fBm the terrain uses so the surfaces share a
 // family resemblance.
 function makeRock(seed: number): THREE.BufferGeometry {
-  const geom = new THREE.IcosahedronGeometry(1, 5);
+  // Dense indexed sphere: indexed geometry gives smooth vertex normals
+  // (the old icosahedron was non-indexed, so every triangle rendered as a
+  // flat facet), and 64x48 segments carry fine surface detail.
+  const geom = new THREE.SphereGeometry(1, 64, 48);
   const pos = geom.attributes.position as THREE.BufferAttribute;
   const v = new THREE.Vector3();
+  const colors = new Float32Array(pos.count * 3);
 
   const ox = seed * 13.7;
   const oy = seed * 27.1;
@@ -21,35 +25,44 @@ function makeRock(seed: number): THREE.BufferGeometry {
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     // Three planar fBm samples averaged so the displacement doesn't have
-    // an obvious axis of symmetry.
+    // an obvious axis of symmetry. Amplitude falls off fast per octave so
+    // low frequencies shape the silhouette and high frequencies only add
+    // fine regolith-like granularity.
     let disp = 0;
     let amp = 1;
-    let freq = 2.4;
+    let freq = 1.3;
     let norm = 0;
-    for (let o = 0; o < 4; o++) {
+    for (let o = 0; o < 5; o++) {
       const s1 = fbm((v.x + ox) * freq, (v.y + oy) * freq);
       const s2 = fbm((v.y + oy) * freq, (v.z + oz) * freq);
       const s3 = fbm((v.z + oz) * freq, (v.x + ox) * freq);
-      disp += amp * ((s1 + s2 + s3) / 3);
+      disp += amp * ((s1 + s2 + s3) / 3 - 0.5);
       norm += amp;
-      amp *= 0.5;
-      freq *= 2.05;
+      amp *= 0.45;
+      freq *= 2.3;
     }
-    disp = disp / norm - 0.5;
+    disp /= norm;
 
     // Scale each vertex outward/inward by the local noise. Amount varies
     // per rock so silhouettes differ.
-    const perRockGain = 0.75 + seededRand(seed + 3) * 0.55;
-    const s = 1 + disp * perRockGain;
-    v.multiplyScalar(s);
+    const perRockGain = 0.55 + seededRand(seed + 3) * 0.4;
+    v.multiplyScalar(1 + disp * perRockGain);
 
     // Flatten the underside so the rock reads as sitting on the ground
     // rather than a floating boulder.
     if (v.y < 0) v.y *= 0.6;
 
     pos.setXYZ(i, v.x, v.y, v.z);
+
+    // Bake crevice shading into vertex colors: recessed areas darken,
+    // ridges stay bright. Multiplies with the material color.
+    const shade = THREE.MathUtils.clamp(0.78 + disp * 1.4, 0.5, 1);
+    colors[i * 3] = shade;
+    colors[i * 3 + 1] = shade;
+    colors[i * 3 + 2] = shade;
   }
 
+  geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
   pos.needsUpdate = true;
   geom.computeVertexNormals();
   return geom;
@@ -64,8 +77,22 @@ export function RockField() {
   return (
     <group>
       {ROCKS.map((r, i) => {
-        // Slight bury so the flat bottom disappears under the terrain.
-        const y = sampleTerrainHeight(r.x, r.z) + r.scaleY * 0.55;
+        // Ground each rock against the LOWEST terrain point under its
+        // footprint (center + ring samples), then bury it a bit. Sampling
+        // only the center let rocks hover when the ground dipped nearby.
+        const foot = Math.max(r.scaleX, r.scaleZ) * 0.8;
+        let ground = sampleTerrainHeight(r.x, r.z);
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2;
+          ground = Math.min(
+            ground,
+            sampleTerrainHeight(
+              r.x + Math.cos(a) * foot,
+              r.z + Math.sin(a) * foot,
+            ),
+          );
+        }
+        const y = ground + r.scaleY * 0.3;
         return (
           <mesh
             key={i}
@@ -78,8 +105,9 @@ export function RockField() {
           >
             <meshStandardMaterial
               color={r.color}
-              roughness={0.95}
+              roughness={0.92}
               metalness={0}
+              vertexColors
             />
           </mesh>
         );
@@ -87,4 +115,3 @@ export function RockField() {
     </group>
   );
 }
-
