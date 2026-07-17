@@ -15,12 +15,12 @@ export function DPad() {
     const input: WalkInput = {
       forward: (p.has("up") ? 1 : 0) - (p.has("down") ? 1 : 0),
       strafe: (p.has("right") ? 1 : 0) - (p.has("left") ? 1 : 0),
-      // Mobile has no shift; run is desktop-only for now.
+      // Mobile has no shift; run/jump are desktop-only for now.
       running: false,
+      jumping: false,
     };
     setWalkInput(input);
   }, [setWalkInput]);
-
   const start = useCallback(
     (d: Dir) => {
       if (!active.current.has(d)) {
