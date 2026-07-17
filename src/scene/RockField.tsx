@@ -10,7 +10,7 @@ import { ROCKS, VARIANT_COUNT, seededRand } from "@/lib/rocks";
 // Displacement uses the same fBm the terrain uses so the surfaces share a
 // family resemblance.
 function makeRock(seed: number): THREE.BufferGeometry {
-  const geom = new THREE.IcosahedronGeometry(1, 4);
+  const geom = new THREE.IcosahedronGeometry(1, 5);
   const pos = geom.attributes.position as THREE.BufferAttribute;
   const v = new THREE.Vector3();
 
@@ -78,7 +78,7 @@ export function RockField() {
           >
             <meshStandardMaterial
               color={r.color}
-              roughness={0.92}
+              roughness={0.95}
               metalness={0}
             />
           </mesh>
@@ -87,3 +87,4 @@ export function RockField() {
     </group>
   );
 }
+
