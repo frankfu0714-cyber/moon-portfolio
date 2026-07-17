@@ -78,15 +78,21 @@ export const CRATERS: {
       }
     }
     if (!ok) continue;
-    arr.push({
-      x: cx,
-      z: cz,
-      r: 2 + ((i * 7) % 6) + fbm(i, i + 1) * 3,
-      depth: 0.35 + fbm(i + 3, i + 5) * 0.9,
-    });
+    const r = 2 + ((i * 7) % 6) + fbm(i, i + 1) * 3;
+    // Depth is capped relative to radius so no crater can form a narrow
+    // steep-walled pit — steep walls stretch the planar texture into
+    // streaks and swallow the astronaut's feet.
+    const depth = Math.min(0.35 + fbm(i + 3, i + 5) * 0.9, r * 0.16);
+    arr.push({ x: cx, z: cz, r, depth });
   }
   return arr;
 })();
+
+// Kept in sync with MoonBase.tsx placements.
+export const FLAT_SITES: { x: number; z: number; r: number; h: number }[] = [
+  { x: -30, z: 20, r: 15, h: 0.1 },
+  { x: 34, z: -20, r: 13, h: 0.1 },
+];
 
 export function sampleTerrainHeight(x: number, z: number) {
   const d = Math.hypot(x, z);
@@ -117,6 +123,16 @@ export function sampleTerrainHeight(x: number, z: number) {
 
   // Fine regolith micro-relief so the floor reads detailed up close.
   h += (fbm(x * 0.5 + 7.3, z * 0.5 - 3.1) - 0.5) * 0.1;
+
+  // Graded building sites: terrain blends flat under the moon base and
+  // the rocket launch pad so the structures sit level with no gaps.
+  for (const f of FLAT_SITES) {
+    const fd = Math.hypot(x - f.x, z - f.z);
+    if (fd < f.r) {
+      const w = 1 - THREE.MathUtils.smoothstep(fd, f.r * 0.55, f.r);
+      h = h * (1 - w) + f.h * w;
+    }
+  }
 
   // Planet curvature.
   const beyond = Math.max(0, d - CURVE_START);
