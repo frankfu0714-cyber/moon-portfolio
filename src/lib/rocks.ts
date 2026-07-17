@@ -90,7 +90,7 @@ function placeRocks(): RockPlacement[] {
 
     // Rock tone - pale sunlit regolith boulders, slightly darker than the
     // surface so they still read as solid debris.
-    const tone = 0.6 + seededRand(seed + 31) * 0.18;
+    const tone = 0.5 + seededRand(seed + 31) * 0.14;
     const warm = seededRand(seed + 33) - 0.5;
     const color = new THREE.Color(
       tone + warm * 0.03,
@@ -153,4 +153,3 @@ export function resolveRockCollision(pos: { x: number; z: number }) {
   }
   return pos;
 }
-
