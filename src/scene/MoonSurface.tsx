@@ -22,7 +22,7 @@ function MoonTextureApplier({
     const tex = loaded as THREE.Texture;
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(26, 26);
+    tex.repeat.set(34, 34);
     tex.anisotropy = 16;
     tex.needsUpdate = true;
   });
@@ -34,7 +34,7 @@ function MoonTextureApplier({
       // Reuse the color map as a bump map — cheap micro-relief that makes
       // the regolith catch the low sun instead of reading as flat paint.
       mat.bumpMap = colorMap;
-      mat.bumpScale = 0.32;
+      mat.bumpScale = 0.5;
       mat.needsUpdate = true;
     }
   }, [colorMap, materialRef]);
@@ -69,6 +69,13 @@ export function MoonSurface() {
           metalness={0}
         />
       </mesh>
+      {/* The visible body of the moon: a huge sphere tucked just under the
+          curved terrain cap so the horizon shows a round limb in every
+          direction — the disc edge can never silhouette against space. */}
+      <mesh position={[0, -322, 0]}>
+        <sphereGeometry args={[320, 96, 48]} />
+        <meshStandardMaterial color="#b9b6ae" roughness={1} metalness={0} />
+      </mesh>
       <SafeAsset label="moon-texture">
         <MoonTextureApplier materialRef={materialRef} />
       </SafeAsset>
@@ -76,3 +83,4 @@ export function MoonSurface() {
     </>
   );
 }
+
