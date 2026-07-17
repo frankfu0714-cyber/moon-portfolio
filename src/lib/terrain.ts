@@ -7,6 +7,12 @@ import * as THREE from "three";
 
 const WALKABLE_R = 45;
 
+// Radius of the fake planet-curvature: beyond the walkable area the ground
+// falls away quadratically (drop = d^2 / 2R) so the horizon reads as the
+// limb of a sphere instead of the edge of a flat disc.
+const CURVE_START = 40;
+const CURVE_RADIUS = 280;
+
 function hash(x: number, y: number) {
   const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
   return s - Math.floor(s);
@@ -109,6 +115,13 @@ export function sampleTerrainHeight(x: number, z: number) {
     }
   }
 
+  // Fine regolith micro-relief so the floor reads detailed up close.
+  h += (fbm(x * 0.5 + 7.3, z * 0.5 - 3.1) - 0.5) * 0.1;
+
+  // Planet curvature.
+  const beyond = Math.max(0, d - CURVE_START);
+  h -= (beyond * beyond) / (2 * CURVE_RADIUS);
+
   return h;
 }
 
@@ -124,3 +137,4 @@ export function sampleSlope(x: number, z: number, h = 0.5) {
     dz: (hzp - hzn) / (2 * h),
   };
 }
+
