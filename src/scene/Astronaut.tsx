@@ -34,7 +34,7 @@ const CLIP_RUN = "CharacterArmature|Run";
 // procedural astronaut it replaces. Scaled down so the astronaut roughly
 // matches the previous framing (head just under the top of the third-person
 // camera's near-plane bracket).
-const MODEL_SCALE = 0.55;
+const MODEL_SCALE = 0.72;
 
 // Speed cap targets — must stay in sync with AstronautController's
 // WALK_SPEED / RUN_SPEED so the walk-vs-idle envelope hits its threshold at
@@ -70,6 +70,48 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     () => cloneWithSkeleton(gltf.scene) as THREE.Group,
     [gltf.scene],
   );
+
+  // Repaint the Quaternius sci-fi suit as a classic white NASA suit with a
+  // gold visor. The GLB ships flat-colored materials (no textures), so a
+  // straight palette swap by material name is safe. Materials are cloned
+  // before mutation so the shared useGLTF cache keeps its original colors.
+  useMemo(() => {
+    const palette: Record<string, Partial<THREE.MeshStandardMaterial>> = {
+      // Main suit shell - warm white fabric.
+      SciFi_Main: { color: new THREE.Color("#e9e7e0"), roughness: 0.75, metalness: 0.02 },
+      // Under-suit / joints - soft light gray.
+      SciFi_MainDark: { color: new THREE.Color("#b9bdc4"), roughness: 0.7, metalness: 0.05 },
+      // Trim panels - bright white.
+      SciFi_Light: { color: new THREE.Color("#f4f2ec"), roughness: 0.6, metalness: 0.05 },
+      // Accents - gold visor tone (was rust orange).
+      SciFi_Light_Accent: {
+        color: new THREE.Color("#d9a441"),
+        roughness: 0.3,
+        metalness: 0.65,
+        emissive: new THREE.Color("#4a3208"),
+        emissiveIntensity: 0.35,
+      },
+      // Visor glass / dark hardware.
+      Grey: { color: new THREE.Color("#2e3138"), roughness: 0.35, metalness: 0.4 },
+    };
+    clonedScene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const wasArray = Array.isArray(mesh.material);
+      const mats = wasArray
+        ? (mesh.material as THREE.Material[])
+        : [mesh.material as THREE.Material];
+      const repainted = mats.map((m) => {
+        const std = m as THREE.MeshStandardMaterial;
+        const swap = palette[std.name];
+        if (!swap) return m;
+        const c = std.clone();
+        Object.assign(c, swap);
+        return c;
+      });
+      mesh.material = wasArray ? repainted : repainted[0];
+    });
+  }, [clonedScene]);
 
   // Strip root-translation tracks from every clip before we hand them to the
   // mixer. Quaternius' Walk and Run clips include baked hip/root position
