@@ -11,21 +11,53 @@ type Props = {
   waypoint: Waypoint;
 };
 
+// The rendered moon is a 220x220-segment grid displaced by
+// sampleTerrainHeight, so between grid vertices the SURFACE THE PLAYER SEES
+// is a linear interpolation that can sit noticeably ABOVE the analytic
+// height (grid cells are ~2.2 units wide). A ring hovered 6cm above the
+// analytic height therefore dipped underground on slopes and looked broken.
+// Fix: sample the same grid bilinearly, take the max of analytic + grid
+// heights, and hover higher.
+const MOON_RADIUS = 240; // keep in sync with MoonSurface
+const MOON_SEGMENTS = 220;
+
+function renderedSurfaceHeight(x: number, z: number) {
+  const cell = (MOON_RADIUS * 2) / MOON_SEGMENTS;
+  const gx = (x + MOON_RADIUS) / cell;
+  const gz = (z + MOON_RADIUS) / cell;
+  const x0 = Math.floor(gx);
+  const z0 = Math.floor(gz);
+  const fx = gx - x0;
+  const fz = gz - z0;
+  const wx0 = x0 * cell - MOON_RADIUS;
+  const wz0 = z0 * cell - MOON_RADIUS;
+  const h00 = sampleTerrainHeight(wx0, wz0);
+  const h10 = sampleTerrainHeight(wx0 + cell, wz0);
+  const h01 = sampleTerrainHeight(wx0, wz0 + cell);
+  const h11 = sampleTerrainHeight(wx0 + cell, wz0 + cell);
+  return (
+    h00 * (1 - fx) * (1 - fz) +
+    h10 * fx * (1 - fz) +
+    h01 * (1 - fx) * fz +
+    h11 * fx * fz
+  );
+}
+
 // Build a ring that drapes over the terrain instead of a flat ringGeometry
-// slicing through crater rims. Each segment samples the height field and
-// hovers a few centimeters above it, so the circle stays unbroken on any
-// slope. Coordinates are WORLD-space (the mesh is positioned at the origin)
-// because the terrain sample needs absolute x/z.
+// slicing through crater rims. Each segment hovers above BOTH the analytic
+// height field and the bilinear rendered-mesh height, so the circle stays
+// unbroken on any slope. Coordinates are WORLD-space (the mesh is positioned
+// at the origin) because the terrain sample needs absolute x/z.
 function makeTerrainRing(
   cx: number,
   cz: number,
   rInner: number,
   rOuter: number,
-  segments = 96,
+  segments = 128,
 ) {
   const positions = new Float32Array((segments + 1) * 2 * 3);
   const indices: number[] = [];
-  const HOVER = 0.06;
+  const HOVER = 0.16;
 
   for (let i = 0; i <= segments; i++) {
     const a = (i / segments) * Math.PI * 2;
@@ -41,7 +73,9 @@ function makeTerrainRing(
     // the band from twisting on steep slopes.
     const xm = cx + cos * ((rInner + rOuter) / 2);
     const zm = cz + sin * ((rInner + rOuter) / 2);
-    const y = sampleTerrainHeight(xm, zm) + HOVER;
+    const y =
+      Math.max(sampleTerrainHeight(xm, zm), renderedSurfaceHeight(xm, zm)) +
+      HOVER;
 
     positions[i * 6 + 0] = xo;
     positions[i * 6 + 1] = y;
@@ -77,7 +111,7 @@ export function WaypointFlag({ waypoint }: Props) {
 
     if (glowRef.current) {
       const mat = glowRef.current.material as THREE.MeshBasicMaterial;
-      const target = near ? 0.55 : 0.2;
+      const target = near ? 0.75 : 0.38;
       mat.opacity += (target - mat.opacity) * 0.08;
     }
 
@@ -101,7 +135,7 @@ export function WaypointFlag({ waypoint }: Props) {
       makeTerrainRing(
         x,
         z,
-        waypoint.proximityRadius - 0.22,
+        waypoint.proximityRadius - 0.3,
         waypoint.proximityRadius,
       ),
     [x, z, waypoint.proximityRadius],
@@ -114,8 +148,11 @@ export function WaypointFlag({ waypoint }: Props) {
         <meshBasicMaterial
           color={waypoint.flagColor}
           transparent
-          opacity={0.2}
+          opacity={0.38}
           depthWrite={false}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
           side={THREE.DoubleSide}
         />
       </mesh>
