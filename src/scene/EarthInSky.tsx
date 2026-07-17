@@ -11,12 +11,27 @@ function EarthTextureApplier({
 }: {
   materialRef: React.RefObject<THREE.MeshStandardMaterial | null>;
 }) {
-  const earthMap = useTexture("/textures/earth/color.jpg");
+  const earthMap = useTexture("/textures/earth/color.jpg", (loaded) => {
+    const tex = loaded as THREE.Texture;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    tex.needsUpdate = true;
+  });
 
   useEffect(() => {
     const mat = materialRef.current;
     if (mat) {
+      // Photo-real mode: the blue-marble texture drives BOTH the lit color
+      // and the emissive channel. From the Moon, Earth is sunlit-brilliant;
+      // relying on the scene's directional light alone left the near side in
+      // shadow (the sun points away from the Earth's player-facing side), so
+      // the emissive map guarantees it always reads as a bright photo.
       mat.map = earthMap;
+      mat.emissiveMap = earthMap;
+      mat.color = new THREE.Color("#ffffff");
+      mat.emissive = new THREE.Color("#ffffff");
+      mat.emissiveIntensity = 0.85;
+      mat.roughness = 1;
       mat.needsUpdate = true;
     }
   }, [earthMap, materialRef]);
@@ -25,14 +40,10 @@ function EarthTextureApplier({
 }
 
 // A big cinematic Earth hanging over the horizon — the "walking on the Moon
-// looking back home" shot. Key details:
-// - `fog={false}` on every material: the scene fog would otherwise swallow
-//   an object this far away, which is why the old small Earth was nearly
-//   invisible.
-// - Lit by the same directional sun as the terrain, so it shows a day/night
-//   terminator instead of flat shading.
-// - Two-layer atmosphere: a tight bright rim plus a wide soft halo.
-const EARTH_R = 30;
+// looking back home" shot. Positioned on the +z side so it sits in the
+// DEFAULT camera view at spawn (camera starts at z≈-6.5 looking toward +z).
+// `fog={false}` everywhere: scene fog would otherwise swallow it.
+const EARTH_R = 34;
 
 export function EarthInSky() {
   const groupRef = useRef<THREE.Group>(null);
@@ -50,7 +61,7 @@ export function EarthInSky() {
   });
 
   return (
-    <group position={[-18, 52, -190]}>
+    <group position={[22, 62, 225]}>
       <group ref={groupRef}>
         <mesh castShadow={false} receiveShadow={false}>
           <sphereGeometry args={[EARTH_R, 64, 64]} />
@@ -70,11 +81,11 @@ export function EarthInSky() {
       </SafeAsset>
       {/* Tight atmospheric rim */}
       <mesh>
-        <sphereGeometry args={[EARTH_R * 1.03, 48, 48]} />
+        <sphereGeometry args={[EARTH_R * 1.025, 48, 48]} />
         <meshBasicMaterial
-          color="#8ec5ff"
+          color="#a8d4ff"
           transparent
-          opacity={0.16}
+          opacity={0.18}
           side={THREE.BackSide}
           depthWrite={false}
           fog={false}
@@ -82,11 +93,11 @@ export function EarthInSky() {
       </mesh>
       {/* Wide soft halo */}
       <mesh ref={glowRef}>
-        <sphereGeometry args={[EARTH_R * 1.12, 48, 48]} />
+        <sphereGeometry args={[EARTH_R * 1.1, 48, 48]} />
         <meshBasicMaterial
-          color="#5f9fe8"
+          color="#6fa8e8"
           transparent
-          opacity={0.07}
+          opacity={0.06}
           side={THREE.BackSide}
           depthWrite={false}
           fog={false}
