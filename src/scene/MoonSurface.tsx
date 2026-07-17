@@ -22,7 +22,7 @@ function MoonTextureApplier({
     const tex = loaded as THREE.Texture;
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(22, 22);
+    tex.repeat.set(26, 26);
     tex.anisotropy = 16;
     tex.needsUpdate = true;
   });
@@ -34,7 +34,7 @@ function MoonTextureApplier({
       // Reuse the color map as a bump map — cheap micro-relief that makes
       // the regolith catch the low sun instead of reading as flat paint.
       mat.bumpMap = colorMap;
-      mat.bumpScale = 0.18;
+      mat.bumpScale = 0.32;
       mat.needsUpdate = true;
     }
   }, [colorMap, materialRef]);
@@ -64,7 +64,7 @@ export function MoonSurface() {
       <mesh geometry={geometry} receiveShadow>
         <meshStandardMaterial
           ref={materialRef}
-          color="#cfccc2"
+          color="#dcd9d2"
           roughness={0.98}
           metalness={0}
         />
