@@ -33,9 +33,11 @@ const CLIP_IDLE = "Standing Idle";
 const CLIP_WALK = "Walking Forward";
 const CLIP_RUN = "Running";
 
-// The model ships in centimeter-ish units — normalize at runtime to this
-// world height (feet at y = 0).
-const TARGET_HEIGHT = 1.75;
+// The GLB's skeleton stands ~74.7 raw units tall (skinned meshes render in
+// skeleton space, ignoring node scale, so runtime bbox measurement lies —
+// this is a measured constant instead). 74.7 * 0.0234 ≈ 1.75 world units.
+const MODEL_SCALE = 0.0234;
+const MODEL_Y_OFFSET = 0.03; // raw feet sit at y ≈ -1.23 → lift into place
 
 // If the model faces the wrong way relative to the controller's heading,
 // adjust this single constant (radians).
@@ -68,13 +70,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
 
   // Skinned mesh — must clone via SkeletonUtils so the skeleton bindings
   // point at the cloned bones (StrictMode-safe fresh instance per mount).
-  const { clonedScene, modelScale, yOffset } = useMemo(() => {
-    const scene = SkeletonUtils.clone(gltf.scene);
-    const box = new THREE.Box3().setFromObject(scene);
-    const height = Math.max(box.max.y - box.min.y, 0.0001);
-    const k = TARGET_HEIGHT / height;
-    return { clonedScene: scene, modelScale: k, yOffset: -box.min.y * k };
-  }, [gltf.scene]);
+  const clonedScene = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene]);
 
   const mixer = useMemo(
     () => new THREE.AnimationMixer(clonedScene),
@@ -193,8 +189,8 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   return (
     <group ref={groupRef} position={[0, 0, 0]}>
       <group ref={tiltGroup}>
-        <group position={[0, yOffset, 0]} rotation={[0, MODEL_YAW, 0]}>
-          <group scale={modelScale}>
+        <group position={[0, MODEL_Y_OFFSET, 0]} rotation={[0, MODEL_YAW, 0]}>
+          <group scale={MODEL_SCALE}>
             <primitive object={clonedScene} />
           </group>
         </group>
