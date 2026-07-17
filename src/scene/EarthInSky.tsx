@@ -62,7 +62,7 @@ export function EarthInSky() {
   });
 
   return (
-    <group position={[22, 40, 225]}>
+    <group position={[22, 33, 225]}>
       <group ref={groupRef}>
         <mesh castShadow={false} receiveShadow={false}>
           <sphereGeometry args={[EARTH_R, 64, 64]} />
