@@ -46,7 +46,7 @@ export function Scene() {
         position={[0, 3.2, -6.5]}
       />
 
-      <fog attach="fog" args={["#0a0d15", 40, 180]} />
+      <fog attach="fog" args={["#0b0e14", 60, 300]} />
 
       {/* HDR environment lighting is nice-to-have. On production behind
           Vercel SSO the .hdr fetch redirects to an HTML login page, which
@@ -58,18 +58,18 @@ export function Scene() {
 
       {/* Stark, high-contrast lunar lighting: one strong warm sun, a faint
           cool bounce, and just enough ambient to keep shadows readable. */}
-      <hemisphereLight args={["#a9c4ff", "#3b2a1a", 0.38]} />
+      <hemisphereLight args={["#bcd0f5", "#4a4238", 0.5]} />
       <directionalLight
         position={[30, 40, 10]}
-        intensity={2.2}
-        color="#fff3dc"
+        intensity={2.6}
+        color="#fff6e6"
       />
       <directionalLight
         position={[-20, 12, -30]}
         intensity={0.35}
         color="#7fb3ff"
       />
-      <ambientLight intensity={0.16} color="#8fa8d6" />
+      <ambientLight intensity={0.22} color="#9db2d8" />
 
       <Stars
         radius={220}
