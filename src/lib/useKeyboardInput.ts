@@ -11,6 +11,8 @@ const KEY_INTERACT = new Set(["KeyE", "Enter"]);
 const KEY_CLOSE = new Set(["Escape"]);
 const KEY_RUN = new Set(["ShiftLeft", "ShiftRight"]);
 const KEY_JUMP = new Set(["Space"]);
+const KEY_ROAM = new Set(["KeyR"]); // toggle auto-roam wander mode
+const KEY_FLOAT = new Set(["KeyF"]); // toggle boot-thruster float mode
 
 export function useKeyboardInput() {
   const pressed = useRef<Set<string>>(new Set());
@@ -48,6 +50,16 @@ export function useKeyboardInput() {
         } else if (nearWaypoint) {
           openPanel(nearWaypoint);
         }
+        return;
+      }
+
+      if (KEY_ROAM.has(e.code)) {
+        store().toggleAutoRoam();
+        return;
+      }
+
+      if (KEY_FLOAT.has(e.code)) {
+        store().toggleFloatMode();
         return;
       }
 
