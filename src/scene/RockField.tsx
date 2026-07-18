@@ -102,9 +102,13 @@ function makeRock(seed: number): THREE.BufferGeometry {
     // Bake crevice shading into vertex colors: recessed areas darken,
     // ridges stay bright. Multiplies with the material color.
     const shade = THREE.MathUtils.clamp(0.68 + disp * 2.6, 0.3, 1);
-    colors[i * 3] = shade;
-    colors[i * 3 + 1] = shade;
-    colors[i * 3 + 2] = shade;
+    // Contact AO: rocks sit buried to local y ~ 0.48, so fade the base
+    // band toward dark. Kills the bright rim where rock meets ground.
+    const contact = THREE.MathUtils.smoothstep(v.y, 0.46, 0.92);
+    const grounded = shade * (0.38 + 0.62 * contact);
+    colors[i * 3] = grounded;
+    colors[i * 3 + 1] = grounded;
+    colors[i * 3 + 2] = grounded;
   }
 
   geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
@@ -123,7 +127,15 @@ export function RockField() {
   // occlusion the shadow map can't resolve, killing the bright strip
   // between each rock's base and its cast shadow.
   const contactShadow = useMemo(() => {
-    const SEG = 26;
+    const SEG = 48;
+    // Radial profile: strong right under the rock and at its silhouette
+    // (f ~ 1) where the bright strip used to leak, fading out beyond.
+    const RIMS: [number, number][] = [
+      [0.35, 0.8],
+      [0.75, 0.68],
+      [1.08, 0.42],
+      [1.5, 0],
+    ];
     const positions: number[] = [];
     const colors: number[] = [];
     const indices: number[] = [];
@@ -135,22 +147,36 @@ export function RockField() {
         const a = (k / SEG) * Math.PI * 2;
         const ux = Math.cos(a);
         const uz = Math.sin(a);
-        const rims: [number, number][] = [
-          [0.3, 0.62],
-          [1.4, 0],
-        ];
-        for (const [f, alpha] of rims) {
+        // Sample all rim heights first so we can measure the local slope.
+        const pts: [number, number, number][] = [];
+        for (const [f] of RIMS) {
           const lx = ux * r.scaleX * f;
           const lz = uz * r.scaleZ * f;
           const wx = r.x + lx * cosY + lz * sinY;
           const wz = r.z - lx * sinY + lz * cosY;
-          positions.push(wx, sampleTerrainHeight(wx, wz) + 0.03, wz);
-          colors.push(0, 0, 0, alpha);
+          pts.push([wx, sampleTerrainHeight(wx, wz), wz]);
+        }
+        // On cliffs/steep mounds the ring quads used to hang in the air
+        // as hard dark triangles — fade the whole spoke out with slope.
+        let steep = 0;
+        for (let j = 0; j + 1 < pts.length; j++) {
+          const dr =
+            (RIMS[j + 1][0] - RIMS[j][0]) * Math.max(r.scaleX, r.scaleZ);
+          steep = Math.max(steep, Math.abs(pts[j + 1][1] - pts[j][1]) / dr);
+        }
+        const fade = THREE.MathUtils.clamp(1 - (steep - 0.55) / 0.5, 0, 1);
+        for (let j = 0; j < RIMS.length; j++) {
+          positions.push(pts[j][0], pts[j][1] + 0.02, pts[j][2]);
+          colors.push(0, 0, 0, RIMS[j][1] * fade);
         }
       }
+      const L = RIMS.length;
       for (let k = 0; k < SEG; k++) {
-        const i0 = base + k * 2;
-        indices.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2);
+        for (let j = 0; j + 1 < L; j++) {
+          const i0 = base + k * L + j;
+          const i1 = base + (k + 1) * L + j;
+          indices.push(i0, i0 + 1, i1, i0 + 1, i1 + 1, i1);
+        }
       }
     }
     const g = new THREE.BufferGeometry();
