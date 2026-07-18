@@ -40,7 +40,7 @@ function MoonTextureApplier({
       // Reuse the color map as a bump map — cheap micro-relief that makes
       // the regolith catch the low sun instead of reading as flat paint.
       mat.bumpMap = colorMap;
-      mat.bumpScale = 0.3;
+      mat.bumpScale = 0.12;
       // Anti-tiling: the 44x repeat makes the texture's big dark blotches
       // and track lines read as an obvious grid from any height. Patch the
       // map lookup so every fragment blends two decorrelated samples (the
@@ -65,17 +65,23 @@ function MoonTextureApplier({
             "#include <map_fragment>",
             `#ifdef USE_MAP
               vec2 mpUv2 = mat2(0.4081, -0.9129, 0.9129, 0.4081) * (vMapUv * 0.3714) + vec2(19.19, 7.33);
+              vec2 mpUv3 = mat2(-0.7373, 0.6755, -0.6755, -0.7373) * (vMapUv * 0.6151) + vec2(5.71, 23.13);
               vec4 mpA = texture2D(map, vMapUv);
               vec4 mpB = texture2D(map, mpUv2);
-              float mpMask = smoothstep(0.30, 0.70, mpNoise(vMapUv * 0.147));
-              vec4 sampledDiffuseColor = mix(mpA, mpB, mpMask);
+              vec4 mpC = texture2D(map, mpUv3);
+              float mpM1 = smoothstep(0.32, 0.68, mpNoise(vMapUv * 0.53));
+              float mpM2 = smoothstep(0.32, 0.68, mpNoise(vMapUv * 0.29 + 11.3));
+              vec4 sampledDiffuseColor = mix(mix(mpA, mpB, mpM1), mpC, mpM2 * 0.65);
+              float mpLum = dot(sampledDiffuseColor.rgb, vec3(0.3333));
+              sampledDiffuseColor.rgb = mix(vec3(mpLum), sampledDiffuseColor.rgb, 0.72);
               float mpVar = mpNoise(vMapUv * 0.043 + 31.7);
-              sampledDiffuseColor.rgb *= 0.88 + 0.24 * mpVar;
+              float mpVar2 = mpNoise(vMapUv * 0.11 + 3.9);
+              sampledDiffuseColor.rgb *= (0.90 + 0.20 * mpVar) * (0.95 + 0.10 * mpVar2);
               diffuseColor *= sampledDiffuseColor;
             #endif`,
           );
       };
-      mat.customProgramCacheKey = () => "moon-antitile";
+      mat.customProgramCacheKey = () => "moon-antitile2";
       mat.needsUpdate = true;
     }
   }, [colorMap, materialRef]);
