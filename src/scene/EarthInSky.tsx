@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
@@ -17,6 +17,59 @@ const LIGHTS_MAP_URL =
   "https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/textures/planets/earth_lights_2048.png";
 
 const EARTH_R = 42;
+
+// The globe's radius in canvas pixels (out of a 512px square). Everything
+// in the halo texture is positioned relative to this so the sprite can be
+// scaled to line the glow up exactly with the mesh limb.
+const CANVAS_GLOBE_R = 150;
+
+// Painted halo: ONE continuous radial gradient for the atmosphere plus a
+// soft offset ring for the sunlit crescent. Because it's a single gradient
+// texture (not stacked translucent shells) the falloff is perfectly smooth
+// - no concentric strips at the limb.
+function makeAtmosphereTexture() {
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const c = size / 2;
+
+  // Atmospheric limb glow: starts just inside the limb, peaks right at
+  // it, then decays smoothly to nothing.
+  const atm = ctx.createRadialGradient(c, c, 0, c, c, c);
+  atm.addColorStop(0.0, "rgba(120,170,240,0)");
+  atm.addColorStop(0.52, "rgba(120,170,240,0)");
+  atm.addColorStop(0.575, "rgba(150,195,255,0.5)");
+  atm.addColorStop(0.62, "rgba(120,170,240,0.26)");
+  atm.addColorStop(0.72, "rgba(100,150,225,0.11)");
+  atm.addColorStop(0.85, "rgba(90,140,215,0.04)");
+  atm.addColorStop(1.0, "rgba(90,140,215,0)");
+  ctx.fillStyle = atm;
+  ctx.fillRect(0, 0, size, size);
+
+  // Sunlit crescent: a soft bright ring whose centre is nudged right, so
+  // only its right side pokes past the globe's limb. The globe mesh
+  // occludes everything inside the disc, leaving a smooth white-blue arc.
+  const cres = ctx.createRadialGradient(
+    c + 14,
+    c - 4,
+    CANVAS_GLOBE_R * 0.75,
+    c + 14,
+    c - 4,
+    CANVAS_GLOBE_R * 1.12,
+  );
+  cres.addColorStop(0.0, "rgba(234,245,255,0)");
+  cres.addColorStop(0.62, "rgba(234,245,255,0.75)");
+  cres.addColorStop(0.78, "rgba(200,228,255,0.3)");
+  cres.addColorStop(1.0, "rgba(200,228,255,0)");
+  ctx.fillStyle = cres;
+  ctx.fillRect(0, 0, size, size);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 
 function EarthTextureApplier({
   globeRef,
@@ -44,7 +97,7 @@ function EarthTextureApplier({
     const globe = globeRef.current;
     if (globe) {
       globe.map = dayMap;
-      globe.color = new THREE.Color("#7d9ecf");
+      globe.color = new THREE.Color("#6a8cbe");
       globe.needsUpdate = true;
     }
     const lights = lightsRef.current;
@@ -60,24 +113,25 @@ function EarthTextureApplier({
 
 export function EarthInSky() {
   const groupRef = useRef<THREE.Group>(null);
-  const glowRef = useRef<THREE.Mesh>(null);
   const globeMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const lightsMatRef = useRef<THREE.MeshBasicMaterial>(null);
+
+  const atmosphereTex = useMemo(() => makeAtmosphereTexture(), []);
+
+  // Sprite scale: the canvas globe radius must project to EARTH_R world
+  // units, so full canvas width (256px half) maps to this many units.
+  const spriteSize = EARTH_R * (256 / CANVAS_GLOBE_R) * 2;
 
   useFrame((_, delta) => {
     if (groupRef.current) {
       groupRef.current.rotation.y += delta * 0.006;
     }
-    if (glowRef.current) {
-      const s = 1 + Math.sin(performance.now() * 0.0004) * 0.01;
-      glowRef.current.scale.setScalar(s);
-    }
   });
 
   return (
-    <group position={[14, 86, 232]}>
+    <group position={[14, 72, 236]}>
       <group ref={groupRef} rotation={[0.15, 2.6, 0]}>
-        {/* Night-blue globe (unlit, brighter than before) */}
+        {/* Night-blue globe (unlit) */}
         <mesh>
           <sphereGeometry args={[EARTH_R, 64, 64]} />
           <meshBasicMaterial ref={globeMatRef} color="#31435e" fog={false} />
@@ -103,60 +157,20 @@ export function EarthInSky() {
       <SafeAsset label="earth-texture">
         <EarthTextureApplier globeRef={globeMatRef} lightsRef={lightsMatRef} />
       </SafeAsset>
-      {/* Even atmospheric rim - brighter than before */}
-      <mesh>
-        <sphereGeometry args={[EARTH_R * 1.02, 48, 48]} />
-        <meshBasicMaterial
-          color="#9ccaff"
+      {/* Atmosphere + crescent, painted as one smooth gradient billboard
+          sitting just behind the globe. The globe mesh depth-occludes the
+          centre of the sprite, so only the halo ring and the right-limb
+          crescent show - with continuous falloff instead of the old
+          stacked-shell colour strips. */}
+      <sprite position={[0, 0, 8]} scale={[spriteSize, spriteSize, 1]}>
+        <spriteMaterial
+          map={atmosphereTex}
           transparent
-          opacity={0.24}
           blending={THREE.AdditiveBlending}
-          side={THREE.BackSide}
           depthWrite={false}
           fog={false}
         />
-      </mesh>
-      {/* Sunlit crescent: a rim shell displaced toward screen-right
-          (-x from the camera's +z view direction) and slightly toward
-          the camera, so its visible ring reads as a bright white-blue
-          arc hugging the right limb - the reference's crescent. */}
-      <mesh position={[-3.2, 1.4, -2.4]}>
-        <sphereGeometry args={[EARTH_R * 1.012, 48, 48]} />
-        <meshBasicMaterial
-          color="#eaf5ff"
-          transparent
-          opacity={0.5}
-          blending={THREE.AdditiveBlending}
-          side={THREE.BackSide}
-          depthWrite={false}
-          fog={false}
-        />
-      </mesh>
-      <mesh position={[-1.6, 0.7, -1.2]}>
-        <sphereGeometry args={[EARTH_R * 1.006, 48, 48]} />
-        <meshBasicMaterial
-          color="#cfe6ff"
-          transparent
-          opacity={0.28}
-          blending={THREE.AdditiveBlending}
-          side={THREE.BackSide}
-          depthWrite={false}
-          fog={false}
-        />
-      </mesh>
-      {/* Wide soft halo */}
-      <mesh ref={glowRef}>
-        <sphereGeometry args={[EARTH_R * 1.14, 48, 48]} />
-        <meshBasicMaterial
-          color="#6fa8e8"
-          transparent
-          opacity={0.075}
-          blending={THREE.AdditiveBlending}
-          side={THREE.BackSide}
-          depthWrite={false}
-          fog={false}
-        />
-      </mesh>
+      </sprite>
     </group>
   );
 }
