@@ -8,7 +8,7 @@ import { sampleTerrainHeight } from "@/lib/terrain";
 import { RockField } from "./RockField";
 
 const RADIUS = 240;
-const SEGMENTS = 300;
+const SEGMENTS = 380;
 
 // Applies the moon color texture to the shared material ref. Isolated so a
 // texture load failure (e.g. Vercel SSO redirect returning HTML instead of
