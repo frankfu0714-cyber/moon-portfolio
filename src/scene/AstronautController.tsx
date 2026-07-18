@@ -93,9 +93,21 @@ const SOLID_CIRCLES = [
   { x: -6, z: -37.5, r: 1.6 },
   { x: -6, z: -34.5, r: 1.6 },
   { x: -6, z: -31.5, r: 1.6 },
-  // Fence front (z = -30), gate open at |x + 12| < 1.3.
+  // Fence front (z = -30). The gate is sealed: a third circle plugs the
+  // old |x + 12| < 1.3 opening so the tower compound is unapproachable.
   { x: -15.65, z: -30, r: 2.35 },
+  { x: -12, z: -30, r: 2.35 },
   { x: -8.35, z: -30, r: 2.35 },
+  // Vertical solar-sail farm at (8, 15) - one circle per mast, mirrors
+  // the SAIL_POSITIONS in MoonBase.tsx.
+  { x: 5.03, z: 11.34, r: 1.1 },
+  { x: 6.14, z: 14.13, r: 1.1 },
+  { x: 7.26, z: 16.91, r: 1.1 },
+  { x: 8.37, z: 19.7, r: 1.1 },
+  { x: 7.63, z: 10.3, r: 1.1 },
+  { x: 8.74, z: 13.09, r: 1.1 },
+  { x: 9.86, z: 15.87, r: 1.1 },
+  { x: 10.97, z: 18.66, r: 1.1 },
 ];
 
 // Roam-mode obstacle avoidance: everything solid (structures + tall
