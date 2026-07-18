@@ -55,6 +55,18 @@ const RUN_NATURAL_SPEED = 2.9;
 // How fast animation weights blend when switching idle/walk/run.
 const BLEND_RATE = 7;
 
+// Post-animation arm spread (radians) so the idle pose doesn't sink the
+// hands into the torso. Rolls the upper arms outward around the body's
+// forward axis, stronger while idling, subtle while walking/running.
+const ARM_SPREAD_BASE = 0.05;
+const ARM_SPREAD_IDLE = 0.13;
+
+const _armAxis = new THREE.Vector3();
+const _gq = new THREE.Quaternion();
+const _pq = new THREE.Quaternion();
+const _dq = new THREE.Quaternion();
+const _cq = new THREE.Quaternion();
+
 useGLTF.preload(MODEL_URL);
 
 export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
@@ -66,6 +78,11 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   const weights = useRef({ idle: 1, walk: 0, run: 0, fall: 0 });
   const prevCycle = useRef(0);
   const stepPos = useRef(new THREE.Vector3());
+  const jetsRef = useRef<THREE.Group>(null);
+  const jetLightRef = useRef<THREE.PointLight>(null);
+  const jetMatsRef = useRef<THREE.MeshBasicMaterial[]>([]);
+  const jetGlowTex = useMemo(() => makeJetGlowTexture(), []);
+  const armBones = useRef<{ l: THREE.Object3D | null; r: THREE.Object3D | null }>({ l: null, r: null });
 
   const gltf = useGLTF(MODEL_URL);
 
@@ -100,6 +117,8 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
 
   useEffect(() => {
     clonedScene.traverse((obj) => {
+      if (obj.name.endsWith("LeftArm")) armBones.current.l = obj;
+      if (obj.name.endsWith("RightArm")) armBones.current.r = obj;
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
@@ -136,13 +155,29 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     const speed = Math.sqrt(speedSquared);
     const runBlend = (g.userData.runBlend as number | undefined) ?? 0;
     const airborne = (g.userData.airborne as boolean | undefined) ?? false;
+    const floatBlend = (g.userData.floatBlend as number | undefined) ?? 0;
     const moving = speed >= WALK_START_SPEED;
+
+    // Boot jets: visible only in float mode. Random per-frame flicker on
+    // the flame scale + light intensity sells the thrust.
+    if (jetsRef.current) {
+      jetsRef.current.visible = floatBlend > 0.02;
+      const flick = 0.8 + Math.random() * 0.35;
+      jetsRef.current.scale.setScalar(Math.max(0.001, floatBlend));
+      for (const m of jetMatsRef.current) {
+        m.opacity = floatBlend * (0.55 + Math.random() * 0.35);
+      }
+      if (jetLightRef.current) {
+        jetLightRef.current.intensity = floatBlend * 2.4 * flick;
+      }
+    }
 
     // Blend animation weights toward the current locomotion state.
     const w = weights.current;
-    // Airborne overrides ground locomotion with a faster blend so the hop
-    // reads immediately.
-    w.fall = THREE.MathUtils.damp(w.fall, airborne ? 1 : 0, 10, dt);
+    // Airborne (or hovering on the jets) overrides ground locomotion with
+    // a faster blend so the pose change reads immediately.
+    const airWeight = Math.max(airborne ? 1 : 0, floatBlend);
+    w.fall = THREE.MathUtils.damp(w.fall, airWeight, 10, dt);
     const ground = 1 - w.fall;
     w.idle = THREE.MathUtils.damp(w.idle, moving ? 0 : 1, BLEND_RATE, dt);
     w.walk = THREE.MathUtils.damp(
@@ -172,6 +207,14 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
 
     mixer.update(dt);
 
+    // Spread the upper arms outward after the mixer has posed the rig so
+    // idle hands sit clear of the torso instead of clipping into it.
+    const spread = ARM_SPREAD_BASE + ARM_SPREAD_IDLE * w.idle;
+    g.getWorldQuaternion(_gq);
+    _armAxis.set(0, 0, 1).applyQuaternion(_gq);
+    spreadArm(armBones.current.l, spread);
+    spreadArm(armBones.current.r, -spread);
+
     // Footstep dust: the dominant gait clip hits a footfall twice per
     // loop (at ~0% and ~50% of the cycle).
     if (moving && onFootstep && w.fall < 0.5) {
@@ -194,6 +237,10 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     }
   });
 
+  const registerJetMat = (m: THREE.MeshBasicMaterial | null) => {
+    if (m && !jetMatsRef.current.includes(m)) jetMatsRef.current.push(m);
+  };
+
   return (
     <group ref={groupRef} position={[0, 0, 0]}>
       <group ref={tiltGroup}>
@@ -202,18 +249,109 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
             <primitive object={clonedScene} />
           </group>
         </group>
+        {/* Boot thrusters — blue-white jet cones + glow under each sole,
+            Iron-Man style. Hidden (scale ~0) unless float mode blends in. */}
+        <group ref={jetsRef} visible={false}>
+          {[-0.13, 0.13].map((x) => (
+            <group key={x} position={[x, 0.06, 0]}>
+              <mesh position={[0, -0.26, 0]} rotation={[Math.PI, 0, 0]}>
+                <coneGeometry args={[0.075, 0.52, 12, 1, true]} />
+                <meshBasicMaterial
+                  ref={registerJetMat}
+                  color="#bfe4ff"
+                  transparent
+                  opacity={0}
+                  depthWrite={false}
+                  toneMapped={false}
+                  blending={THREE.AdditiveBlending}
+                  side={THREE.DoubleSide}
+                />
+              </mesh>
+              <mesh position={[0, -0.18, 0]} rotation={[Math.PI, 0, 0]}>
+                <coneGeometry args={[0.038, 0.3, 10, 1, true]} />
+                <meshBasicMaterial
+                  ref={registerJetMat}
+                  color="#ffffff"
+                  transparent
+                  opacity={0}
+                  depthWrite={false}
+                  toneMapped={false}
+                  blending={THREE.AdditiveBlending}
+                />
+              </mesh>
+              <sprite position={[0, -0.05, 0]} scale={[0.34, 0.34, 1]}>
+                <spriteMaterial
+                  map={jetGlowTex}
+                  transparent
+                  depthWrite={false}
+                  toneMapped={false}
+                  blending={THREE.AdditiveBlending}
+                />
+              </sprite>
+            </group>
+          ))}
+          <pointLight
+            ref={jetLightRef}
+            position={[0, -0.35, 0]}
+            color="#8ecbff"
+            intensity={0}
+            distance={5}
+            decay={2}
+          />
+        </group>
       </group>
     </group>
   );
 });
 
+// Soft round blue-white glow for the jet nozzles.
+function makeJetGlowTexture() {
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const c = size / 2;
+  const g = ctx.createRadialGradient(c, c, 0, c, c, c);
+  g.addColorStop(0, "rgba(255,255,255,0.95)");
+  g.addColorStop(0.25, "rgba(190,225,255,0.55)");
+  g.addColorStop(0.6, "rgba(130,190,255,0.16)");
+  g.addColorStop(1, "rgba(130,190,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Rotate an upper-arm bone by `angle` around the world-space `_armAxis`,
+// preserving the animated pose underneath (delta applied in parent space).
+function spreadArm(bone: THREE.Object3D | null, angle: number) {
+  if (!bone || !bone.parent) return;
+  bone.parent.getWorldQuaternion(_pq);
+  _dq.setFromAxisAngle(_armAxis, angle);
+  _cq.copy(_pq).invert().multiply(_dq).multiply(_pq);
+  bone.quaternion.premultiply(_cq);
+}
+
 // Clone + gently tune the GLB's baked materials so the white suit catches
-// the hard lunar sun without blowing out. Transparent parts (visor glass)
-// are left untouched.
+// the hard lunar sun without blowing out. The transparent visor glass is
+// converted to an opaque gloss-black mask (no see-through face).
 function tuneSuit(mat: THREE.Material): THREE.Material {
   const std = mat as THREE.MeshStandardMaterial;
   const c = std.clone();
-  if ("roughness" in c && !c.transparent) {
+  if (c.transparent) {
+    const v = c as THREE.MeshStandardMaterial;
+    v.transparent = false;
+    v.opacity = 1;
+    v.depthWrite = true;
+    if ("color" in v) v.color.set("#0a0b0e");
+    if ("roughness" in v) {
+      v.roughness = 0.22;
+      v.metalness = 0.4;
+      v.envMapIntensity = 1.0;
+    }
+  } else if ("roughness" in c) {
     c.roughness = Math.min(1, (std.roughness ?? 0.8) * 1.05);
     c.metalness = Math.min(0.2, std.metalness ?? 0);
     c.envMapIntensity = 0.7;
