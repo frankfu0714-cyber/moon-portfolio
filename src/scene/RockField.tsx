@@ -119,8 +119,58 @@ export function RockField() {
     [],
   );
 
+  // One merged terrain-conforming dark ring per rock: fakes the contact
+  // occlusion the shadow map can't resolve, killing the bright strip
+  // between each rock's base and its cast shadow.
+  const contactShadow = useMemo(() => {
+    const SEG = 26;
+    const positions: number[] = [];
+    const colors: number[] = [];
+    const indices: number[] = [];
+    for (const r of ROCKS) {
+      const cosY = Math.cos(r.rotY);
+      const sinY = Math.sin(r.rotY);
+      const base = positions.length / 3;
+      for (let k = 0; k <= SEG; k++) {
+        const a = (k / SEG) * Math.PI * 2;
+        const ux = Math.cos(a);
+        const uz = Math.sin(a);
+        const rims: [number, number][] = [
+          [0.5, 0.55],
+          [1.5, 0],
+        ];
+        for (const [f, alpha] of rims) {
+          const lx = ux * r.scaleX * f;
+          const lz = uz * r.scaleZ * f;
+          const wx = r.x + lx * cosY + lz * sinY;
+          const wz = r.z - lx * sinY + lz * cosY;
+          positions.push(wx, sampleTerrainHeight(wx, wz) + 0.03, wz);
+          colors.push(0, 0, 0, alpha);
+        }
+      }
+      for (let k = 0; k < SEG; k++) {
+        const i0 = base + k * 2;
+        indices.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    g.setAttribute("color", new THREE.Float32BufferAttribute(colors, 4));
+    g.setIndex(indices);
+    return g;
+  }, []);
+
   return (
     <group>
+      <mesh geometry={contactShadow} renderOrder={1}>
+        <meshBasicMaterial
+          vertexColors
+          transparent
+          depthWrite={false}
+          polygonOffset
+          polygonOffsetFactor={-2}
+        />
+      </mesh>
       {ROCKS.map((r, i) => {
         // Ground each rock against the LOWEST terrain point under its
         // footprint (center + ring samples), then bury it a bit. Sampling
@@ -137,7 +187,7 @@ export function RockField() {
             ),
           );
         }
-        const y = ground - r.scaleY * 0.22;
+        const y = ground - r.scaleY * 0.34;
         return (
           <mesh
             key={i}
