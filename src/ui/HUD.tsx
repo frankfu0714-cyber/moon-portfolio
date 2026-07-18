@@ -13,10 +13,39 @@ import { MuteButton } from "./MuteButton";
 // title in the corner.
 const HINTS_VISIBLE_MS = 9000;
 
+function ModeButton({
+  label,
+  on,
+  onClick,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <motion.button
+      type="button"
+      whileTap={{ scale: 0.92 }}
+      onClick={onClick}
+      className={`rounded-full border backdrop-blur px-3 py-2 text-xs transition font-mono ${
+        on
+          ? "border-sky-300/60 bg-sky-400/15 text-sky-100 opacity-100"
+          : "border-white/15 bg-black/40 opacity-80 hover:opacity-100"
+      }`}
+    >
+      {label} · {on ? "ON" : "OFF"}
+    </motion.button>
+  );
+}
+
 export function HUD() {
   const nearWaypoint = useSceneStore((s) => s.nearWaypoint);
   const activePanel = useSceneStore((s) => s.activePanel);
   const openPanel = useSceneStore((s) => s.openPanel);
+  const autoRoam = useSceneStore((s) => s.autoRoam);
+  const floatMode = useSceneStore((s) => s.floatMode);
+  const toggleAutoRoam = useSceneStore((s) => s.toggleAutoRoam);
+  const toggleFloatMode = useSceneStore((s) => s.toggleFloatMode);
   const near = WAYPOINTS.find((w) => w.id === nearWaypoint);
 
   const [hintsVisible, setHintsVisible] = useState(true);
@@ -37,8 +66,10 @@ export function HUD() {
         </div>
       </div>
 
-      {/* Top-right mute */}
-      <div className="fixed top-4 right-4 z-30 opacity-70 hover:opacity-100 transition-opacity">
+      {/* Top-right controls: roam / float / sound */}
+      <div className="fixed top-4 right-4 z-30 flex gap-2 opacity-70 hover:opacity-100 transition-opacity">
+        <ModeButton label="ROAM" on={autoRoam} onClick={toggleAutoRoam} />
+        <ModeButton label="FLOAT" on={floatMode} onClick={toggleFloatMode} />
         <MuteButton />
       </div>
 
@@ -53,7 +84,7 @@ export function HUD() {
               transition={{ duration: 1.2 }}
               className="text-[10px] font-mono tracking-[0.2em] uppercase whitespace-nowrap"
             >
-              W A S D&ensp;walk&ensp;·&ensp;Shift&ensp;run&ensp;·&ensp;E&ensp;interact&ensp;·&ensp;Esc&ensp;close
+              W A S D&ensp;walk&ensp;·&ensp;Shift&ensp;run&ensp;·&ensp;R&ensp;roam&ensp;·&ensp;F&ensp;float&ensp;·&ensp;E&ensp;interact
             </motion.div>
           )}
         </AnimatePresence>
