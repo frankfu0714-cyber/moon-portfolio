@@ -9,6 +9,7 @@ import { AstronautController } from "./AstronautController";
 import { MoonSurface } from "./MoonSurface";
 import { EarthInSky } from "./EarthInSky";
 import { WaypointFlag } from "./WaypointFlag";
+import { MoonBase } from "./MoonBase";
 import { SafeAsset } from "./SafeAsset";
 import { WAYPOINTS } from "@/lib/waypoints";
 import { sampleTerrainHeight } from "@/lib/terrain";
@@ -130,12 +131,12 @@ function makeHorizonTexture() {
   // canvas y=0 is the dome's zenith (v=1), y=512 the nadir (v=0);
   // the horizon sits at y=256.
   g.addColorStop(0.0, "rgba(150,190,235,0)");
-  g.addColorStop(0.3, "rgba(150,190,235,0)");
-  g.addColorStop(0.42, "rgba(150,190,235,0.07)");
-  g.addColorStop(0.48, "rgba(168,203,240,0.2)");
-  g.addColorStop(0.52, "rgba(182,212,246,0.28)");
-  g.addColorStop(0.58, "rgba(168,203,240,0.16)");
-  g.addColorStop(0.72, "rgba(150,190,235,0)");
+  g.addColorStop(0.4, "rgba(150,190,235,0)");
+  g.addColorStop(0.46, "rgba(150,190,235,0.05)");
+  g.addColorStop(0.5, "rgba(170,205,242,0.14)");
+  g.addColorStop(0.53, "rgba(182,212,246,0.2)");
+  g.addColorStop(0.58, "rgba(168,203,240,0.1)");
+  g.addColorStop(0.66, "rgba(150,190,235,0)");
   g.addColorStop(1.0, "rgba(150,190,235,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 4, 512);
@@ -207,10 +208,10 @@ export function Scene() {
       {/* Cinematic lunar lighting: one hard low sun that casts real
           shadows (rocks + astronaut), almost no fill — deep black shadow
           sides like the reference footage. */}
-      <hemisphereLight args={["#aebfe0", "#3a352d", 0.3]} />
+      <hemisphereLight args={["#aebfe0", "#3a352d", 0.2]} />
       <directionalLight
         position={[45, 13, -18]}
-        intensity={3.4}
+        intensity={2.5}
         color="#fff4e0"
         castShadow
         shadow-mapSize-width={4096}
@@ -228,7 +229,7 @@ export function Scene() {
         intensity={0.22}
         color="#7fb3ff"
       />
-      <ambientLight intensity={0.14} color="#93a8cf" />
+      <ambientLight intensity={0.09} color="#93a8cf" />
 
       <Stars
         radius={230}
@@ -247,6 +248,7 @@ export function Scene() {
           belt-and-braces defense. */}
       <SafeAsset label="moon">
         <MoonSurface />
+        <MoonBase />
       </SafeAsset>
       <SafeAsset label="earth">
         <EarthInSky />
@@ -280,7 +282,7 @@ export function Scene() {
             luminanceSmoothing={0.25}
             mipmapBlur
           />
-          <Vignette eskil={false} offset={0.18} darkness={0.75} />
+          <Vignette eskil={false} offset={0.2} darkness={0.85} />
         </EffectComposer>
       </SafeAsset>
     </Canvas>
