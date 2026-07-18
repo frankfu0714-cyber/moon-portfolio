@@ -33,7 +33,7 @@ type Actions = {
 
 export const useSceneStore = create<State & Actions>((set) => ({
   ready: false,
-  muted: true,
+  muted: false,
   activePanel: null,
   nearWaypoint: null,
   walkInput: { forward: 0, strafe: 0, running: false, jumping: false },
