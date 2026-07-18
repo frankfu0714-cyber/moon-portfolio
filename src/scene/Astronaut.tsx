@@ -189,7 +189,9 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
           const w = 0.85 + 0.22 * Math.random();
           c.scale.x = w;
           c.scale.z = w;
-          c.rotation.z = Math.PI + Math.sin(t * 23 + i * 3.7) * 0.08;
+          // No PI here: rotation.x is already PI from JSX; adding PI on z
+          // composed into an un-flip that pointed the cone tip upward.
+          c.rotation.z = Math.sin(t * 23 + i * 3.7) * 0.08;
         }
         // Exhaust stream: recycled glow puffs shooting down out of each
         // boot, shrinking and fading as they fall — reads as real thrust.
@@ -325,7 +327,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
                   blending={THREE.AdditiveBlending}
                 />
               </mesh>
-              <sprite position={[0, -0.05, 0]} scale={[0.34, 0.34, 1]}>
+              <sprite position={[0, -0.03, 0]} scale={[0.52, 0.52, 1]}>
                 <spriteMaterial
                   map={jetGlowTex}
                   transparent
