@@ -101,6 +101,24 @@ const SOLID_CIRCLES = [
 // Roam-mode obstacle avoidance: everything solid (structures + tall
 // rocks) as XZ circles. The roamer steers smoothly around these instead
 // of ramming them and waiting for the stuck timer.
+// The rocket launch pad is a solid platform: anywhere on the disc the
+// boots stand on its metal top instead of sinking to the regolith
+// underneath. Numbers mirror MoonBase's Rocket(): pad cylinder at
+// (34,-20), top radius 6.2 / base 6.6, top face at GROUND + 0.35.
+const PAD_X = 34;
+const PAD_Z = -20;
+const PAD_TOP = 0.45;
+const PAD_R_TOP = 6.2;
+const PAD_R_BASE = 6.6;
+
+function walkSurfaceHeight(x: number, z: number): number {
+  const terrain = sampleMeshHeight(x, z);
+  const d = Math.hypot(x - PAD_X, z - PAD_Z);
+  if (d >= PAD_R_BASE) return terrain;
+  const t = d <= PAD_R_TOP ? 1 : (PAD_R_BASE - d) / (PAD_R_BASE - PAD_R_TOP);
+  return Math.max(terrain, terrain + (PAD_TOP - terrain) * t);
+}
+
 const OBSTACLES: { x: number; z: number; r: number }[] = [
   ...SOLID_CIRCLES,
   ...ROCKS.filter((r) => r.scaleY >= 0.35).map((r) => ({
@@ -375,7 +393,7 @@ export function AstronautController() {
     // caught higher ground).
     const px = astronaut.position.x;
     const pz = astronaut.position.z;
-    const groundY = sampleMeshHeight(px, pz);
+    const groundY = walkSurfaceHeight(px, pz);
     const hoverLift =
       floatBlend.current *
       (FLOAT_HEIGHT +
