@@ -327,7 +327,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
                   blending={THREE.AdditiveBlending}
                 />
               </mesh>
-              <sprite position={[0, -0.03, 0]} scale={[0.52, 0.52, 1]}>
+              <sprite position={[0, -0.01, 0]} scale={[0.88, 0.88, 1]}>
                 <spriteMaterial
                   map={jetGlowTex}
                   transparent
