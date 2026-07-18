@@ -53,6 +53,7 @@ const yellowMat = new THREE.MeshStandardMaterial({
   color: "#e8c33a",
   metalness: 0.3,
   roughness: 0.6,
+  side: THREE.DoubleSide,
 });
 const black = new THREE.MeshStandardMaterial({
   color: "#111318",
@@ -402,7 +403,9 @@ function Rocket() {
       <mesh material={padMat} position={[0, GROUND + 0.17, 0]} receiveShadow castShadow>
         <cylinderGeometry args={[6.2, 6.6, 0.36, 36]} />
       </mesh>
-      <mesh material={yellowMat} position={[0, padTop + 0.012, 0]}>
+      {/* Painted flat on the pad top; it used to stand vertically (missing
+          rotation) and vanish from behind (single-sided). */}
+      <mesh material={yellowMat} position={[0, padTop + 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[5.1, 5.55, 36]} />
       </mesh>
       {/* Body */}
