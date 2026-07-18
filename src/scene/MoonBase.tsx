@@ -1,6 +1,7 @@
 "use client";
 
 import * as THREE from "three";
+import { sampleTerrainHeight } from "@/lib/terrain";
 
 // Lunar outpost matching Frank's references: a modular metallic habitat
 // (cylindrical modules on stilt legs, solar array, dish antennas, access
@@ -263,8 +264,10 @@ function Station() {
         <mesh material={hullDark} position={[0, GROUND + 4.75, 0]} castShadow>
           <cylinderGeometry args={[1.27, 1.27, 0.5, 20]} />
         </mesh>
-        <mesh material={hullDark} position={[0, GROUND + 5.1, 0]}>
-          <sphereGeometry args={[1.25, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2.6]} />
+        {/* Dome cap: the rim sits at GROUND + 4.9, buried inside the dark
+            band (4.5..5.0), so there is no floating gap from any angle. */}
+        <mesh material={hullDark} position={[0, GROUND + 4.72, 0]}>
+          <sphereGeometry args={[1.25, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2.2]} />
         </mesh>
         {[0, 1, 2].map((i) => (
           <mesh key={i} material={frame} position={[0, GROUND + 2.1 + i * 1.1, 0]}>
@@ -743,12 +746,100 @@ function NeonTower() {
   );
 }
 
+
+// Vertical solar-sail farm, per Frank's Solestial reference: tall dark
+// red-tinted cell sheets standing upright like sails, each on a thin
+// mast with tripod legs, in two parallel rows on flat ground near
+// (8, 15). Every sail faces the sun azimuth (rotY = 1.95 rad matches
+// the key light at [45, 13, -18]).
+const sailCell = new THREE.MeshStandardMaterial({
+  color: "#4a1d22",
+  metalness: 0.75,
+  roughness: 0.3,
+  side: THREE.DoubleSide,
+});
+
+const SAIL_ROT_Y = 1.95;
+const SAIL_POSITIONS: [number, number][] = [
+  [5.03, 11.34],
+  [6.14, 14.13],
+  [7.26, 16.91],
+  [8.37, 19.7],
+  [7.63, 10.3],
+  [8.74, 13.09],
+  [9.86, 15.87],
+  [10.97, 18.66],
+];
+
+function SolarSail({ x, z }: { x: number; z: number }) {
+  const y = sampleTerrainHeight(x, z) - 0.04;
+  return (
+    <group position={[x, y, z]} rotation={[0, SAIL_ROT_Y, 0]}>
+      {/* Mast */}
+      <mesh material={frame} position={[0, 1.6, 0]} castShadow>
+        <cylinderGeometry args={[0.055, 0.075, 3.2, 8]} />
+      </mesh>
+      {/* Tripod legs + foot pads */}
+      {[0, 1, 2].map((i) => {
+        const a = (i / 3) * Math.PI * 2;
+        return (
+          <group key={i} rotation={[0, a, 0]}>
+            <mesh material={frame} position={[0.425, 0.475, 0]} rotation={[0, 0, 0.73]}>
+              <cylinderGeometry args={[0.035, 0.045, 1.3, 6]} />
+            </mesh>
+            <mesh material={frame} position={[0.85, 0.04, 0]}>
+              <cylinderGeometry args={[0.14, 0.18, 0.08, 8]} />
+            </mesh>
+          </group>
+        );
+      })}
+      {/* The sail: tall portrait panel mounted high on the mast */}
+      <mesh material={sailCell} position={[0, 2.05, 0]} castShadow>
+        <boxGeometry args={[1.75, 2.4, 0.07]} />
+      </mesh>
+      {/* Frame border */}
+      {([[0, 3.27, 1.83, 0.06], [0, 0.83, 1.83, 0.06]] as const).map(([fx, fy, fw, fh], i) => (
+        <mesh key={"h" + i} material={frame} position={[fx, fy, 0]}>
+          <boxGeometry args={[fw, fh, 0.09]} />
+        </mesh>
+      ))}
+      {[-0.9, 0.9].map((fx, i) => (
+        <mesh key={"v" + i} material={frame} position={[fx, 2.05, 0]}>
+          <boxGeometry args={[0.06, 2.5, 0.09]} />
+        </mesh>
+      ))}
+      {/* Cell dividers */}
+      {[-0.44, 0, 0.44].map((fx, i) => (
+        <mesh key={"c" + i} material={frame} position={[fx, 2.05, 0]}>
+          <boxGeometry args={[0.025, 2.4, 0.085]} />
+        </mesh>
+      ))}
+      {[1.45, 2.05, 2.65].map((fy, i) => (
+        <mesh key={"r" + i} material={frame} position={[0, fy, 0]}>
+          <boxGeometry args={[1.75, 0.025, 0.085]} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function SolarFarm() {
+  return (
+    <group>
+      {SAIL_POSITIONS.map(([x, z], i) => (
+        <SolarSail key={i} x={x} z={z} />
+      ))}
+    </group>
+  );
+}
+
 export function MoonBase() {
   return (
     <>
       <Station />
       <Rocket />
       <NeonTower />
+      <SolarFarm />
     </>
   );
 }
