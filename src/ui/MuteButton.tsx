@@ -177,6 +177,14 @@ class AmbientMusic {
     }, wait);
   }
 
+  // Autoplay policy leaves the context suspended until the first user
+  // gesture; poke it awake so sound-on-by-default actually makes noise.
+  unlock() {
+    if (this.running && this.ctx && this.ctx.state === "suspended") {
+      void this.ctx.resume();
+    }
+  }
+
   private pluck() {
     const ctx = this.ctx;
     if (!ctx || !this.delaySend || !this.master) return;
@@ -207,8 +215,24 @@ export function MuteButton() {
 
   useEffect(() => {
     if (!music) return;
-    if (muted) music.stop();
-    else music.start();
+    if (muted) {
+      music.stop();
+      return;
+    }
+    music.start();
+    // Sound defaults to on, but browsers refuse to start audio without
+    // a user gesture — resume the context on the first interaction.
+    const unlock = () => {
+      music.unlock();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
   }, [muted]);
 
   return (
