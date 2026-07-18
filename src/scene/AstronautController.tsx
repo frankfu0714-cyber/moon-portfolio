@@ -9,7 +9,7 @@ import { SafeAsset } from "./SafeAsset";
 import { useSceneStore } from "@/lib/store";
 import { WAYPOINTS, type WaypointId } from "@/lib/waypoints";
 import { sampleMeshHeight, sampleSlope } from "@/lib/terrain";
-import { resolveRockCollision } from "@/lib/rocks";
+import { ROCKS, resolveRockCollision } from "@/lib/rocks";
 
 const WALK_SPEED = 1.2; // units/sec — chill vibe
 const RUN_SPEED = 2.6; // units/sec — "run slowly" jog
@@ -61,16 +61,35 @@ const SOLID_CIRCLES = [
   { x: LANDER_X, z: LANDER_Z, r: LANDER_RADIUS },
   // Station habitat modules (narrow strips of small circles along each
   // cylinder instead of two huge discs, so the ground nearby is walkable).
+  // Far end cap of the long module — the body was clipping through it.
+  { x: -35.2, z: 22.83, r: 2.1 },
   { x: -34.04, z: 22.21, r: 2.0 },
   { x: -32.28, z: 21.25, r: 2.0 },
   { x: -30.53, z: 20.29, r: 2.0 },
   { x: -28.52, z: 20.21, r: 1.8 },
   { x: -27.11, z: 19.45, r: 1.8 },
   { x: -25.71, z: 18.68, r: 1.8 },
+  // Access stairs in front of the near module hatch.
+  { x: -31.08, z: 23.44, r: 1.7 },
   // Vertical airlock tank.
   { x: -22.79, z: 19.02, r: 1.5 },
-  { x: 34, z: -20, r: 6.8 },
+  // Rocket body only — the pad is walkable so you can stroll up to the hatch.
+  { x: 34, z: -20, r: 2.6 },
 ];
+
+// Roam-mode obstacle avoidance: everything solid (structures + tall
+// rocks) as XZ circles. The roamer steers smoothly around these instead
+// of ramming them and waiting for the stuck timer.
+const OBSTACLES: { x: number; z: number; r: number }[] = [
+  ...SOLID_CIRCLES,
+  ...ROCKS.filter((r) => r.scaleY >= 0.35).map((r) => ({
+    x: r.x,
+    z: r.z,
+    r: r.collisionRadius + 0.42,
+  })),
+];
+const AVOID_LOOKAHEAD = 6; // obstacles closer than this start to matter
+const AVOID_STRENGTH = 1.7; // how hard the path bends around them
 
 // Terrain-following.
 const FOOT_OFFSET = 0.02;
@@ -88,6 +107,10 @@ const CAM_LERP_TARGET = 5;
 // behind the astronaut — reads as momentum rather than jerk.
 const CAM_LERP_POS_RUN = 2.2;
 const CAM_LERP_TARGET_RUN = 3.4;
+// Follow-cam: how fast the orbit yaw swings around behind the current
+// walking direction while the astronaut is on the move.
+const CAM_FOLLOW_ROAM = 1.6;
+const CAM_FOLLOW_MANUAL = 1.1;
 
 export function AstronautController() {
   const astronautRef = useRef<AstronautHandle>(null);
@@ -255,6 +278,8 @@ export function AstronautController() {
             ROAM_SPEED * (1 + floatBlend.current),
           );
           desired.set(dx / dist, 0, dz / dist).multiplyScalar(roamCap);
+          // Bend the path around anything solid sitting ahead.
+          steerAroundObstacles(astronaut.position, desired);
           // If something (rock, module) keeps us pinned, give up on this
           // target and pick a fresh one.
           const speedNow = Math.hypot(velocity.current.x, velocity.current.z);
@@ -433,6 +458,18 @@ export function AstronautController() {
     );
     astronaut.rotation.y = heading.current;
 
+    // Swing the camera around behind the astronaut whenever they are on
+    // the move so the view follows the walking/running direction. A
+    // mouse drag pauses the follow; it resumes once movement continues.
+    if (!dragging.current && speedSq > 0.02) {
+      orbitYaw.current = dampAngle(
+        orbitYaw.current,
+        targetHeading.current,
+        manualActive ? CAM_FOLLOW_MANUAL : CAM_FOLLOW_ROAM,
+        dt,
+      );
+    }
+
     // Body pitch/roll — approximate slope in the local forward/right axes
     // and apply it to the tilt group (inside the heading rotation) so it
     // reads as terrain adaptation rather than world-axis wobble.
@@ -543,6 +580,44 @@ function pickRoamTarget(from: THREE.Vector3): { x: number; z: number } {
     if (!blocked) return { x, z };
   }
   return { x: 0, z: 0 }; // safe fallback: spawn plaza
+}
+
+// Blend a lateral push into `desired` for every obstacle sitting close
+// ahead of the travel line, so the roamer arcs around rocks and
+// buildings instead of grinding against their colliders.
+function steerAroundObstacles(pos: THREE.Vector3, desired: THREE.Vector3) {
+  const speed = Math.hypot(desired.x, desired.z);
+  if (speed < 1e-4) return;
+  const dirX = desired.x / speed;
+  const dirZ = desired.z / speed;
+  let pushX = 0;
+  let pushZ = 0;
+  for (const ob of OBSTACLES) {
+    const ox = ob.x - pos.x;
+    const oz = ob.z - pos.z;
+    const gap = Math.hypot(ox, oz) - ob.r;
+    if (gap > AVOID_LOOKAHEAD) continue;
+    // Only obstacles roughly ahead matter.
+    if (ox * dirX + oz * dirZ < 0) continue;
+    // Lateral offset of the obstacle center from the travel line — if
+    // it is bigger than the radius (plus body margin) we already miss.
+    const cross = dirX * oz - dirZ * ox;
+    if (Math.abs(cross) > ob.r + 1.2) continue;
+    const urgency = 1 - Math.max(gap, 0) / AVOID_LOOKAHEAD;
+    // Push perpendicular to travel, away from the obstacle center.
+    const side = cross > 0 ? -1 : 1;
+    pushX += -dirZ * side * urgency * AVOID_STRENGTH;
+    pushZ += dirX * side * urgency * AVOID_STRENGTH;
+  }
+  if (pushX !== 0 || pushZ !== 0) {
+    let nx = dirX + pushX;
+    let nz = dirZ + pushZ;
+    const n = Math.hypot(nx, nz);
+    if (n > 1e-4) {
+      desired.x = (nx / n) * speed;
+      desired.z = (nz / n) * speed;
+    }
+  }
 }
 
 // Damp an angle across the -PI/+PI wrap-around.
