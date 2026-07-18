@@ -136,8 +136,8 @@ export function RockField() {
         const ux = Math.cos(a);
         const uz = Math.sin(a);
         const rims: [number, number][] = [
-          [0.5, 0.55],
-          [1.5, 0],
+          [0.3, 0.62],
+          [1.4, 0],
         ];
         for (const [f, alpha] of rims) {
           const lx = ux * r.scaleX * f;
@@ -187,7 +187,7 @@ export function RockField() {
             ),
           );
         }
-        const y = ground - r.scaleY * 0.34;
+        const y = ground - r.scaleY * 0.48;
         return (
           <mesh
             key={i}
