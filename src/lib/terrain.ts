@@ -153,3 +153,37 @@ export function sampleSlope(x: number, z: number, h = 0.5) {
     dz: (hzp - hzn) / (2 * h),
   };
 }
+
+// Mesh-exact height sampling -------------------------------------------------
+// The rendered moon is a PlaneGeometry grid (TERRAIN_SEGMENTS x TERRAIN_SEGMENTS
+// quads, each split into two triangles) whose vertices are displaced by
+// sampleTerrainHeight. Between vertices the GPU interpolates linearly, so the
+// visible floor can sit above or below the analytic field. Sampling the same
+// triangle mesh keeps the astronaut's boots exactly on the surface the player
+// sees -- no sinking on steep slopes, no hovering next to ridges.
+export const TERRAIN_RADIUS = 240;
+export const TERRAIN_SEGMENTS = 380;
+
+export function sampleMeshHeight(x: number, z: number) {
+  const R = TERRAIN_RADIUS;
+  const step = (R * 2) / TERRAIN_SEGMENTS;
+  const gx = THREE.MathUtils.clamp((x + R) / step, 0, TERRAIN_SEGMENTS - 1e-6);
+  const gz = THREE.MathUtils.clamp((z + R) / step, 0, TERRAIN_SEGMENTS - 1e-6);
+  const ix = Math.floor(gx);
+  const iz = Math.floor(gz);
+  const u = gx - ix;
+  const v = gz - iz;
+  const x0 = -R + ix * step;
+  const z0 = -R + iz * step;
+  const x1 = x0 + step;
+  const z1 = z0 + step;
+  const hA = sampleTerrainHeight(x0, z0);
+  const hB = sampleTerrainHeight(x0, z1);
+  const hC = sampleTerrainHeight(x1, z1);
+  const hD = sampleTerrainHeight(x1, z0);
+  // PlaneGeometry splits each quad into triangles (a,b,d) and (b,c,d).
+  if (u + v <= 1) {
+    return hA + (hD - hA) * u + (hB - hA) * v;
+  }
+  return hC + (hB - hC) * (1 - u) + (hD - hC) * (1 - v);
+}
