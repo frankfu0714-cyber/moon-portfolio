@@ -110,13 +110,28 @@ const PAD_Z = -20;
 const PAD_TOP = 0.45;
 const PAD_R_TOP = 6.2;
 const PAD_R_BASE = 6.6;
+// Boarding steps at the rocket door (two padMat boxes in MoonBase).
+const DOOR_A = Math.atan2(-6, -34);
+const DOOR_DX = Math.cos(DOOR_A);
+const DOOR_DZ = Math.sin(DOOR_A);
+const STEP_HALF_W = 0.66;
 
 function walkSurfaceHeight(x: number, z: number): number {
   const terrain = sampleMeshHeight(x, z);
   const d = Math.hypot(x - PAD_X, z - PAD_Z);
   if (d >= PAD_R_BASE) return terrain;
   const t = d <= PAD_R_TOP ? 1 : (PAD_R_BASE - d) / (PAD_R_BASE - PAD_R_TOP);
-  return Math.max(terrain, terrain + (PAD_TOP - terrain) * t);
+  let h = Math.max(terrain, terrain + (PAD_TOP - terrain) * t);
+  // Boarding steps by the rocket door: box tops at 0.71 / 0.61.
+  const rx = x - PAD_X;
+  const rz = z - PAD_Z;
+  const rd = rx * DOOR_DX + rz * DOOR_DZ;
+  const lat = -rx * DOOR_DZ + rz * DOOR_DX;
+  if (Math.abs(lat) <= STEP_HALF_W) {
+    if (rd >= 2.0 && rd <= 2.65) h = Math.max(h, PAD_TOP + 0.26);
+    else if (rd > 2.65 && rd <= 3.16) h = Math.max(h, PAD_TOP + 0.16);
+  }
+  return h;
 }
 
 const OBSTACLES: { x: number; z: number; r: number }[] = [
