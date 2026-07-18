@@ -445,11 +445,304 @@ function Rocket() {
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// Neon lattice tower - cyberpunk comms mast per Frank's reference photo:
+// tall dark-steel truss with X-braced tiers, hot-pink neon running up one
+// edge and electric-cyan up the opposite edge, a chain-link fenced base
+// with a front gate, and a beacon-topped antenna mast.
+//
+// Sits on terrain graded flat by FLAT_SITES at (-12, -36), height 0.1.
+
+const TOWER_X = -12;
+const TOWER_Z = -36;
+
+const neonPink = new THREE.MeshStandardMaterial({
+  color: "#ff2fa0",
+  emissive: "#ff2fa0",
+  emissiveIntensity: 3.4,
+  toneMapped: false,
+});
+const neonCyan = new THREE.MeshStandardMaterial({
+  color: "#26c9ff",
+  emissive: "#26c9ff",
+  emissiveIntensity: 3.4,
+  toneMapped: false,
+});
+const fencePanel = new THREE.MeshStandardMaterial({
+  color: "#232830",
+  metalness: 0.6,
+  roughness: 0.55,
+  transparent: true,
+  opacity: 0.3,
+  side: THREE.DoubleSide,
+});
+
+// Truss geometry: square cross-section tapering from half-width 2.1 at the
+// ground to 0.8 at the top platform, split into 5 X-braced tiers.
+const TOWER_TIERS = [0, 5, 10, 14.5, 18.5, 22];
+const TOWER_HW_BASE = 2.1;
+const TOWER_HW_TOP = 0.8;
+const TOWER_H = TOWER_TIERS[TOWER_TIERS.length - 1];
+const TOWER_CORNERS: [number, number][] = [
+  [1, 1],
+  [1, -1],
+  [-1, -1],
+  [-1, 1],
+];
+
+function towerHW(y: number) {
+  return TOWER_HW_BASE + (TOWER_HW_TOP - TOWER_HW_BASE) * (y / TOWER_H);
+}
+
+type StrutSpec = {
+  a: [number, number, number];
+  b: [number, number, number];
+  r: number;
+  m: "steel" | "pink" | "cyan";
+};
+
+function buildTowerStruts(): StrutSpec[] {
+  const s: StrutSpec[] = [];
+  for (let i = 0; i < TOWER_TIERS.length - 1; i++) {
+    const y0 = TOWER_TIERS[i];
+    const y1 = TOWER_TIERS[i + 1];
+    const w0 = towerHW(y0);
+    const w1 = towerHW(y1);
+    for (let c = 0; c < 4; c++) {
+      const [sx, sz] = TOWER_CORNERS[c];
+      const [nx, nz] = TOWER_CORNERS[(c + 1) % 4];
+      // Corner leg for this tier.
+      s.push({
+        a: [sx * w0, y0, sz * w0],
+        b: [sx * w1, y1, sz * w1],
+        r: 0.09,
+        m: "steel",
+      });
+      // Horizontal ring beam at the top of the tier.
+      s.push({
+        a: [sx * w1, y1, sz * w1],
+        b: [nx * w1, y1, nz * w1],
+        r: 0.055,
+        m: "steel",
+      });
+      // X-brace pair on this face.
+      s.push({
+        a: [sx * w0, y0, sz * w0],
+        b: [nx * w1, y1, nz * w1],
+        r: 0.04,
+        m: "steel",
+      });
+      s.push({
+        a: [nx * w0, y0, nz * w0],
+        b: [sx * w1, y1, sz * w1],
+        r: 0.04,
+        m: "steel",
+      });
+    }
+    // Neon tubes hugging two opposite corner edges, nudged outward so they
+    // read as mounted fixtures instead of z-fighting with the legs.
+    const off = 1.07;
+    const [px, pz] = TOWER_CORNERS[0];
+    const [cx, cz] = TOWER_CORNERS[2];
+    s.push({
+      a: [px * w0 * off, y0 + 0.1, pz * w0 * off],
+      b: [px * w1 * off, y1, pz * w1 * off],
+      r: 0.05,
+      m: "pink",
+    });
+    s.push({
+      a: [cx * w0 * off, y0 + 0.1, cz * w0 * off],
+      b: [cx * w1 * off, y1, cz * w1 * off],
+      r: 0.05,
+      m: "cyan",
+    });
+  }
+  return s;
+}
+
+const TOWER_STRUTS = buildTowerStruts();
+const STRUT_UP = new THREE.Vector3(0, 1, 0);
+
+function Strut({
+  a,
+  b,
+  r,
+  material,
+  glow = false,
+}: {
+  a: [number, number, number];
+  b: [number, number, number];
+  r: number;
+  material: THREE.Material;
+  glow?: boolean;
+}) {
+  const av = new THREE.Vector3(...a);
+  const bv = new THREE.Vector3(...b);
+  const len = av.distanceTo(bv);
+  const mid = av.clone().add(bv).multiplyScalar(0.5);
+  const q = new THREE.Quaternion().setFromUnitVectors(
+    STRUT_UP,
+    bv.clone().sub(av).normalize(),
+  );
+  return (
+    <mesh
+      position={[mid.x, mid.y, mid.z]}
+      quaternion={q}
+      material={material}
+      castShadow={!glow}
+    >
+      <cylinderGeometry args={[r, r, len, 6]} />
+    </mesh>
+  );
+}
+
+// Fence: 6-unit half-width square, 1.15 tall, gate opening on the +Z face.
+const FENCE_HW = 6;
+const FENCE_H = 1.15;
+const GATE_HW = 1.3; // gate half-width on the front face
+
+function fencePosts(): [number, number][] {
+  const posts: [number, number][] = [];
+  for (const t of [-6, -3, 0, 3, 6]) {
+    posts.push([t, -FENCE_HW]); // back
+    posts.push([-FENCE_HW, t]); // left
+    posts.push([FENCE_HW, t]); // right
+  }
+  for (const t of [-6, -3, -GATE_HW, GATE_HW, 3, 6]) {
+    posts.push([t, FENCE_HW]); // front, doubled posts framing the gate
+  }
+  // De-dupe corners.
+  const seen = new Set<string>();
+  return posts.filter(([x, z]) => {
+    const k = `${x}|${z}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+const FENCE_POSTS = fencePosts();
+
+function NeonTower() {
+  const frontPanelW = FENCE_HW - GATE_HW; // 4.7
+  const frontPanelX = GATE_HW + frontPanelW / 2;
+  return (
+    <group position={[TOWER_X, GROUND, TOWER_Z]}>
+      {/* Truss + neon edges */}
+      {TOWER_STRUTS.map((st, i) => (
+        <Strut
+          key={i}
+          a={st.a}
+          b={st.b}
+          r={st.r}
+          material={
+            st.m === "pink" ? neonPink : st.m === "cyan" ? neonCyan : frame
+          }
+          glow={st.m !== "steel"}
+        />
+      ))}
+
+      {/* Concrete footing pads under the four legs */}
+      {TOWER_CORNERS.map(([sx, sz], i) => (
+        <mesh
+          key={`foot${i}`}
+          position={[sx * TOWER_HW_BASE, 0.12, sz * TOWER_HW_BASE]}
+          material={padMat}
+          castShadow
+          receiveShadow
+        >
+          <boxGeometry args={[1.0, 0.24, 1.0]} />
+        </mesh>
+      ))}
+
+      {/* Top platform with alternating neon trim */}
+      <mesh position={[0, TOWER_H + 0.07, 0]} material={frame} castShadow>
+        <boxGeometry args={[2.6, 0.14, 2.6]} />
+      </mesh>
+      <Strut a={[-1.3, TOWER_H + 0.17, 1.3]} b={[1.3, TOWER_H + 0.17, 1.3]} r={0.045} material={neonPink} glow />
+      <Strut a={[-1.3, TOWER_H + 0.17, -1.3]} b={[1.3, TOWER_H + 0.17, -1.3]} r={0.045} material={neonCyan} glow />
+      <Strut a={[1.3, TOWER_H + 0.17, -1.3]} b={[1.3, TOWER_H + 0.17, 1.3]} r={0.045} material={neonPink} glow />
+      <Strut a={[-1.3, TOWER_H + 0.17, -1.3]} b={[-1.3, TOWER_H + 0.17, 1.3]} r={0.045} material={neonCyan} glow />
+
+      {/* Antenna mast, crossbars, beacon */}
+      <mesh position={[0, TOWER_H + 1.7, 0]} material={frame} castShadow>
+        <cylinderGeometry args={[0.05, 0.07, 3.2, 8]} />
+      </mesh>
+      <mesh position={[0, TOWER_H + 2.2, 0]} rotation={[0, 0, Math.PI / 2]} material={frame}>
+        <cylinderGeometry args={[0.025, 0.025, 0.9, 6]} />
+      </mesh>
+      <mesh position={[0, TOWER_H + 2.7, 0]} rotation={[Math.PI / 2, 0, 0]} material={frame}>
+        <cylinderGeometry args={[0.025, 0.025, 0.7, 6]} />
+      </mesh>
+      <mesh position={[0, TOWER_H + 3.35, 0]} material={neonPink}>
+        <sphereGeometry args={[0.14, 12, 12]} />
+      </mesh>
+
+      {/* Neon ground glow - one pink pool, one cyan, from opposite corners */}
+      <pointLight
+        position={[2.6, 7, 2.6]}
+        color="#ff2fa0"
+        intensity={7}
+        distance={22}
+        decay={2}
+      />
+      <pointLight
+        position={[-2.6, 13, -2.6]}
+        color="#26c9ff"
+        intensity={7}
+        distance={26}
+        decay={2}
+      />
+
+      {/* Perimeter fence: posts, two rails per side, translucent mesh panels,
+          gate opening on the front face */}
+      {FENCE_POSTS.map(([x, z], i) => (
+        <mesh key={`post${i}`} position={[x, FENCE_H / 2, z]} material={frame} castShadow>
+          <cylinderGeometry args={[0.045, 0.045, FENCE_H, 6]} />
+        </mesh>
+      ))}
+      {[0.55, 1.08].map((h) => (
+        <group key={`rails${h}`}>
+          <Strut a={[-FENCE_HW, h, -FENCE_HW]} b={[FENCE_HW, h, -FENCE_HW]} r={0.028} material={frame} />
+          <Strut a={[-FENCE_HW, h, -FENCE_HW]} b={[-FENCE_HW, h, FENCE_HW]} r={0.028} material={frame} />
+          <Strut a={[FENCE_HW, h, -FENCE_HW]} b={[FENCE_HW, h, FENCE_HW]} r={0.028} material={frame} />
+          <Strut a={[GATE_HW, h, FENCE_HW]} b={[FENCE_HW, h, FENCE_HW]} r={0.028} material={frame} />
+          <Strut a={[-FENCE_HW, h, FENCE_HW]} b={[-GATE_HW, h, FENCE_HW]} r={0.028} material={frame} />
+        </group>
+      ))}
+      <mesh position={[0, 0.62, -FENCE_HW]} material={fencePanel}>
+        <planeGeometry args={[FENCE_HW * 2, 0.95]} />
+      </mesh>
+      <mesh position={[-FENCE_HW, 0.62, 0]} rotation={[0, Math.PI / 2, 0]} material={fencePanel}>
+        <planeGeometry args={[FENCE_HW * 2, 0.95]} />
+      </mesh>
+      <mesh position={[FENCE_HW, 0.62, 0]} rotation={[0, Math.PI / 2, 0]} material={fencePanel}>
+        <planeGeometry args={[FENCE_HW * 2, 0.95]} />
+      </mesh>
+      <mesh position={[frontPanelX, 0.62, FENCE_HW]} material={fencePanel}>
+        <planeGeometry args={[frontPanelW, 0.95]} />
+      </mesh>
+      <mesh position={[-frontPanelX, 0.62, FENCE_HW]} material={fencePanel}>
+        <planeGeometry args={[frontPanelW, 0.95]} />
+      </mesh>
+
+      {/* Small neon signs clipped to the front fence */}
+      <mesh position={[-3.4, 0.86, FENCE_HW + 0.06]} material={neonPink}>
+        <planeGeometry args={[0.95, 0.42]} />
+      </mesh>
+      <mesh position={[3.4, 0.74, FENCE_HW + 0.06]} material={neonCyan}>
+        <planeGeometry args={[0.72, 0.34]} />
+      </mesh>
+    </group>
+  );
+}
+
 export function MoonBase() {
   return (
     <>
       <Station />
       <Rocket />
+      <NeonTower />
     </>
   );
 }
