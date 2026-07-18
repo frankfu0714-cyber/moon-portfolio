@@ -81,6 +81,10 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   const jetsRef = useRef<THREE.Group>(null);
   const jetLightRef = useRef<THREE.PointLight>(null);
   const jetMatsRef = useRef<THREE.MeshBasicMaterial[]>([]);
+  const flameConesRef = useRef<THREE.Mesh[]>([]);
+  const jetParticlesRef = useRef<
+    { s: THREE.Sprite; mat: THREE.SpriteMaterial; phase: number; speed: number }[]
+  >([]);
   const jetGlowTex = useMemo(() => makeJetGlowTexture(), []);
   const armBones = useRef<{ l: THREE.Object3D | null; r: THREE.Object3D | null }>({ l: null, r: null });
 
@@ -146,7 +150,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
     },
   }));
 
-  useFrame((_state, deltaRaw) => {
+  useFrame((state, deltaRaw) => {
     const g = groupRef.current;
     if (!g) return;
     const dt = Math.min(deltaRaw, 0.05);
@@ -165,10 +169,39 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
       const flick = 0.8 + Math.random() * 0.35;
       jetsRef.current.scale.setScalar(Math.max(0.001, floatBlend));
       for (const m of jetMatsRef.current) {
-        m.opacity = floatBlend * (0.55 + Math.random() * 0.35);
+        m.opacity = floatBlend * (0.6 + Math.random() * 0.4);
       }
       if (jetLightRef.current) {
-        jetLightRef.current.intensity = floatBlend * 2.4 * flick;
+        jetLightRef.current.intensity = floatBlend * (2.0 + Math.random() * 2.2);
+      }
+      if (floatBlend > 0.02) {
+        const t = state.clock.elapsedTime;
+        // Living flame: every frame the cones stretch/squash and jitter
+        // sideways so the fire visibly licks and roars instead of sitting
+        // as a static shape.
+        for (let i = 0; i < flameConesRef.current.length; i++) {
+          const c = flameConesRef.current[i];
+          c.scale.y =
+            0.72 +
+            0.26 * Math.sin(t * 41 + i * 2.63) +
+            0.14 * Math.sin(t * 89 + i * 5.1) +
+            0.14 * Math.random();
+          const w = 0.85 + 0.22 * Math.random();
+          c.scale.x = w;
+          c.scale.z = w;
+          c.rotation.z = Math.PI + Math.sin(t * 23 + i * 3.7) * 0.08;
+        }
+        // Exhaust stream: recycled glow puffs shooting down out of each
+        // boot, shrinking and fading as they fall — reads as real thrust.
+        for (const pt of jetParticlesRef.current) {
+          const frac = (t * pt.speed + pt.phase) % 1;
+          pt.s.position.y = -0.14 - frac * 0.85;
+          pt.s.position.x = Math.sin((t * 7 + pt.phase * 40) * pt.speed) * 0.03 * frac;
+          pt.s.position.z = Math.cos((t * 6 + pt.phase * 31) * pt.speed) * 0.03 * frac;
+          const sc = 0.17 * (1 - frac * 0.72);
+          pt.s.scale.set(sc, sc, 1);
+          pt.mat.opacity = floatBlend * (1 - frac) * (0.65 + 0.3 * Math.random());
+        }
       }
     }
 
@@ -240,6 +273,19 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
   const registerJetMat = (m: THREE.MeshBasicMaterial | null) => {
     if (m && !jetMatsRef.current.includes(m)) jetMatsRef.current.push(m);
   };
+  const registerFlameCone = (m: THREE.Mesh | null) => {
+    if (m && !flameConesRef.current.includes(m)) flameConesRef.current.push(m);
+  };
+  const registerJetParticle = (sp: THREE.Sprite | null, idx: number) => {
+    if (sp && !jetParticlesRef.current.some((e) => e.s === sp)) {
+      jetParticlesRef.current.push({
+        s: sp,
+        mat: sp.material as THREE.SpriteMaterial,
+        phase: (idx * 0.1618) % 1,
+        speed: 1.25 + (idx % 5) * 0.17,
+      });
+    }
+  };
 
   return (
     <group ref={groupRef} position={[0, 0, 0]}>
@@ -254,7 +300,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
         <group ref={jetsRef} visible={false}>
           {[-0.13, 0.13].map((x) => (
             <group key={x} position={[x, 0.06, 0]}>
-              <mesh position={[0, -0.26, 0]} rotation={[Math.PI, 0, 0]}>
+              <mesh ref={registerFlameCone} position={[0, -0.26, 0]} rotation={[Math.PI, 0, 0]}>
                 <coneGeometry args={[0.075, 0.52, 12, 1, true]} />
                 <meshBasicMaterial
                   ref={registerJetMat}
@@ -267,7 +313,7 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
                   side={THREE.DoubleSide}
                 />
               </mesh>
-              <mesh position={[0, -0.18, 0]} rotation={[Math.PI, 0, 0]}>
+              <mesh ref={registerFlameCone} position={[0, -0.18, 0]} rotation={[Math.PI, 0, 0]}>
                 <coneGeometry args={[0.038, 0.3, 10, 1, true]} />
                 <meshBasicMaterial
                   ref={registerJetMat}
@@ -288,6 +334,24 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
                   blending={THREE.AdditiveBlending}
                 />
               </sprite>
+              {Array.from({ length: 7 }, (_, pi) => (
+                <sprite
+                  key={pi}
+                  ref={(sp) => registerJetParticle(sp, pi + (x < 0 ? 0 : 7))}
+                  position={[0, -0.2, 0]}
+                  scale={[0.14, 0.14, 1]}
+                >
+                  <spriteMaterial
+                    map={jetGlowTex}
+                    color="#8fd4ff"
+                    transparent
+                    opacity={0}
+                    depthWrite={false}
+                    toneMapped={false}
+                    blending={THREE.AdditiveBlending}
+                  />
+                </sprite>
+              ))}
             </group>
           ))}
           <pointLight
