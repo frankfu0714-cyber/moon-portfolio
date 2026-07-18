@@ -43,7 +43,7 @@ const FLOAT_HEIGHT = 1.15;
 const FLOAT_BOB_AMP = 0.09;
 const FLOAT_BOB_HZ = 0.55;
 const FLOAT_BLEND_LAMBDA = 3.2;
-const FLOAT_SPEED = 2.1; // gliding on jets is quicker than a stroll
+const FLOAT_SPEED = 3.6; // gliding on jets — clearly faster than a run
 
 // Keep the astronaut on the detailed part of the terrain cap, well away
 // from where the curvature drop-off gets steep.
