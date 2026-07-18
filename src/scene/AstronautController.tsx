@@ -98,16 +98,16 @@ const SOLID_CIRCLES = [
   { x: -15.65, z: -30, r: 2.35 },
   { x: -12, z: -30, r: 2.35 },
   { x: -8.35, z: -30, r: 2.35 },
-  // Vertical solar-sail farm at (8, 15) - one circle per mast, mirrors
-  // the SAIL_POSITIONS in MoonBase.tsx.
-  { x: 5.03, z: 11.34, r: 1.1 },
-  { x: 6.14, z: 14.13, r: 1.1 },
-  { x: 7.26, z: 16.91, r: 1.1 },
-  { x: 8.37, z: 19.7, r: 1.1 },
-  { x: 7.63, z: 10.3, r: 1.1 },
-  { x: 8.74, z: 13.09, r: 1.1 },
-  { x: 9.86, z: 15.87, r: 1.1 },
-  { x: 10.97, z: 18.66, r: 1.1 },
+  // Vertical solar-sail farm west of the lander - one circle per mast,
+  // mirrors the SAIL_POSITIONS in MoonBase.tsx.
+  { x: 0.03, z: 13.34, r: 1.1 },
+  { x: 1.14, z: 16.13, r: 1.1 },
+  { x: 2.26, z: 18.91, r: 1.1 },
+  { x: 3.37, z: 21.7, r: 1.1 },
+  { x: 2.63, z: 12.3, r: 1.1 },
+  { x: 3.74, z: 15.09, r: 1.1 },
+  { x: 4.86, z: 17.87, r: 1.1 },
+  { x: 5.97, z: 20.66, r: 1.1 },
 ];
 
 // Roam-mode obstacle avoidance: everything solid (structures + tall
