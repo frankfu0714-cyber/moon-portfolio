@@ -35,6 +35,16 @@ const LANDER_X = 10;
 const LANDER_Z = 16;
 const LANDER_RADIUS = 3.6;
 
+// Static solid footprints (XZ circles): the lander, the two halves of the
+// moon-base habitat cluster, and the rocket launch pad (kept in sync with
+// MoonBase.tsx placements).
+const SOLID_CIRCLES = [
+  { x: LANDER_X, z: LANDER_Z, r: LANDER_RADIUS },
+  { x: -33, z: 21, r: 6 },
+  { x: -24, z: 19.5, r: 6 },
+  { x: 34, z: -20, r: 6.8 },
+];
+
 // Terrain-following.
 const FOOT_OFFSET = 0.02;
 const HEIGHT_LERP = 0.15; // per-frame low-pass; kills crater-rim jitter
@@ -66,6 +76,12 @@ export function AstronautController() {
   const runBlend = useRef(0); // 0 = walk, 1 = run — smooths camera + anim
   const camPos = useRef(new THREE.Vector3(0, CAM_HEIGHT, -CAM_DISTANCE));
   const camTarget = useRef(new THREE.Vector3(0, 1.4, CAM_LOOK_AHEAD));
+  // Free-look orbit state: the camera hangs off the astronaut on a
+  // mouse-driven yaw/pitch instead of snapping behind the walk heading.
+  const orbitYaw = useRef(0);
+  const orbitPitch = useRef(0.28);
+  const orbitDist = useRef(CAM_DISTANCE);
+  const dragging = useRef(false);
   const tmpVec = useRef(new THREE.Vector3());
   const tmpForward = useRef(new THREE.Vector3());
   const tmpDesired = useRef(new THREE.Vector3());
@@ -76,7 +92,50 @@ export function AstronautController() {
   useEffect(() => {
     camera.position.copy(camPos.current);
     camera.lookAt(camTarget.current);
-  }, [camera]);
+  });
+
+  // Mouse free-look: drag to orbit, wheel to zoom. The view angle is
+  // fully decoupled from the walking direction; WASD stays camera-
+  // relative so movement always goes where you'd expect.
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      const el = e.target as HTMLElement | null;
+      if (el && el.closest("button, a, input, [data-ui]")) return;
+      dragging.current = true;
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      orbitYaw.current -= e.movementX * 0.005;
+      orbitPitch.current = THREE.MathUtils.clamp(
+        orbitPitch.current + e.movementY * 0.004,
+        -0.45,
+        1.15,
+      );
+    };
+    const onPointerUp = () => {
+      dragging.current = false;
+    };
+    const onWheel = (e: WheelEvent) => {
+      orbitDist.current = THREE.MathUtils.clamp(
+        orbitDist.current + e.deltaY * 0.01,
+        3.2,
+        13,
+      );
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    window.addEventListener("wheel", onWheel, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      window.removeEventListener("wheel", onWheel);
+    };
+  }, []);
 
   useFrame((_, deltaRaw) => {
     const dt = Math.min(deltaRaw, 0.05);
@@ -150,13 +209,14 @@ export function AstronautController() {
     // angle slides you along its flank instead of stopping you dead.
     resolveRockCollision(astronaut.position);
 
-    // The lander is solid too — same circle push-out as the rocks.
-    {
-      const ldx = astronaut.position.x - LANDER_X;
-      const ldz = astronaut.position.z - LANDER_Z;
+    // The lander, moon-base modules and rocket pad are solid too — same
+    // circle push-out as the rocks.
+    for (const sc of SOLID_CIRCLES) {
+      const ldx = astronaut.position.x - sc.x;
+      const ldz = astronaut.position.z - sc.z;
       const ld = Math.hypot(ldx, ldz);
-      if (ld < LANDER_RADIUS && ld > 1e-5) {
-        const push = (LANDER_RADIUS - ld) / ld;
+      if (ld < sc.r && ld > 1e-5) {
+        const push = (sc.r - ld) / ld;
         astronaut.position.x += ldx * push;
         astronaut.position.z += ldz * push;
       }
@@ -174,9 +234,19 @@ export function AstronautController() {
 
     // Sample the surface and low-pass toward it so the astronaut tracks
     // crater rims and dunes without jitter on high-frequency vertices.
-    const targetY =
-      sampleTerrainHeight(astronaut.position.x, astronaut.position.z) +
-      FOOT_OFFSET;
+    // Take the MAX over a small footprint: the rendered mesh linearly
+    // interpolates between vertices, so on steep crater walls a single
+    // centre sample can sit below the visible surface and the boots sink
+    // into the regolith. The footprint max keeps the feet on top.
+    const px = astronaut.position.x;
+    const pz = astronaut.position.z;
+    let groundY = sampleTerrainHeight(px, pz);
+    const FOOT_R = 0.42;
+    groundY = Math.max(groundY, sampleTerrainHeight(px + FOOT_R, pz));
+    groundY = Math.max(groundY, sampleTerrainHeight(px - FOOT_R, pz));
+    groundY = Math.max(groundY, sampleTerrainHeight(px, pz + FOOT_R));
+    groundY = Math.max(groundY, sampleTerrainHeight(px, pz - FOOT_R));
+    const targetY = groundY + FOOT_OFFSET;
 
     // Low-gravity jump: Space launches, a simple ballistic arc brings the
     // astronaut back to the sampled terrain height.
@@ -288,9 +358,9 @@ export function AstronautController() {
       useSceneStore.getState().setNearWaypoint(nearest);
     }
 
-    // Third-person follow camera (behind current heading). Damping
-    // constants shrink as runBlend rises so the camera lags behind
-    // during a run — reads as momentum, not jerk.
+    // Free-look orbit camera around the astronaut's chest. Mouse drag
+    // sets yaw/pitch, wheel sets distance; damping keeps it buttery and
+    // lags a touch more during a run so it reads as momentum.
     const camLerpPos = THREE.MathUtils.lerp(
       CAM_LERP_POS,
       CAM_LERP_POS_RUN,
@@ -301,49 +371,24 @@ export function AstronautController() {
       CAM_LERP_TARGET_RUN,
       runBlend.current,
     );
-    const behindX = astronaut.position.x - Math.sin(heading.current) * CAM_DISTANCE;
-    const behindZ = astronaut.position.z - Math.cos(heading.current) * CAM_DISTANCE;
-    camPos.current.x = THREE.MathUtils.damp(
-      camPos.current.x,
-      behindX,
-      camLerpPos,
-      dt,
-    );
-    camPos.current.z = THREE.MathUtils.damp(
-      camPos.current.z,
-      behindZ,
-      camLerpPos,
-      dt,
-    );
-    camPos.current.y = THREE.MathUtils.damp(
-      camPos.current.y,
-      CAM_HEIGHT + astronaut.position.y,
-      camLerpPos,
-      dt,
-    );
+    const pivotX = astronaut.position.x;
+    const pivotY = astronaut.position.y + 1.4;
+    const pivotZ = astronaut.position.z;
+    const cosP = Math.cos(orbitPitch.current);
+    const desX = pivotX - Math.sin(orbitYaw.current) * cosP * orbitDist.current;
+    const desZ = pivotZ - Math.cos(orbitYaw.current) * cosP * orbitDist.current;
+    let desY = pivotY + Math.sin(orbitPitch.current) * orbitDist.current;
+    // Never sink the camera into the regolith.
+    const floorY = sampleTerrainHeight(desX, desZ) + 0.5;
+    if (desY < floorY) desY = floorY;
 
-    const aheadX =
-      astronaut.position.x + Math.sin(heading.current) * CAM_LOOK_AHEAD;
-    const aheadZ =
-      astronaut.position.z + Math.cos(heading.current) * CAM_LOOK_AHEAD;
-    camTarget.current.x = THREE.MathUtils.damp(
-      camTarget.current.x,
-      aheadX,
-      camLerpTarget,
-      dt,
-    );
-    camTarget.current.z = THREE.MathUtils.damp(
-      camTarget.current.z,
-      aheadZ,
-      camLerpTarget,
-      dt,
-    );
-    camTarget.current.y = THREE.MathUtils.damp(
-      camTarget.current.y,
-      1.4 + astronaut.position.y,
-      camLerpTarget,
-      dt,
-    );
+    camPos.current.x = THREE.MathUtils.damp(camPos.current.x, desX, camLerpPos, dt);
+    camPos.current.z = THREE.MathUtils.damp(camPos.current.z, desZ, camLerpPos, dt);
+    camPos.current.y = THREE.MathUtils.damp(camPos.current.y, desY, camLerpPos, dt);
+
+    camTarget.current.x = THREE.MathUtils.damp(camTarget.current.x, pivotX, camLerpTarget, dt);
+    camTarget.current.z = THREE.MathUtils.damp(camTarget.current.z, pivotZ, camLerpTarget, dt);
+    camTarget.current.y = THREE.MathUtils.damp(camTarget.current.y, pivotY, camLerpTarget, dt);
 
     camera.position.copy(camPos.current);
     camera.lookAt(camTarget.current);
@@ -377,4 +422,3 @@ function dampAngle(current: number, target: number, lambda: number, dt: number) 
   const eased = THREE.MathUtils.damp(0, delta, lambda, dt);
   return current + eased;
 }
-
