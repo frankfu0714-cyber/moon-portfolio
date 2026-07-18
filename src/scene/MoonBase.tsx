@@ -339,8 +339,62 @@ function Rocket() {
       </mesh>,
     );
   }
+  // Entrance hatch: faces the spawn plaza (world origin) so you walk up
+  // to it naturally. Recessed dark frame, white hatch with a porthole,
+  // a glowing entry light, boarding steps and handrails.
+  const doorA = Math.atan2(20, -34); // azimuth from pad center toward spawn
+  const doorRy = Math.PI / 2 - doorA; // rotates a box's +z face onto that azimuth
+  const dX = Math.cos(doorA);
+  const dZ = Math.sin(doorA);
+  const doorLatX = -dZ; // lateral (sideways) unit vector along the hull
+  const doorLatZ = dX;
+  const doorY = padTop + 1.2;
   return (
     <group position={[34, 0, -20]}>
+      {/* --- Entrance --- */}
+      {/* Recessed frame */}
+      <mesh material={hullDark} position={[dX * 1.86, doorY + 0.05, dZ * 1.86]} rotation={[0, doorRy, 0]}>
+        <boxGeometry args={[1.35, 2.15, 0.16]} />
+      </mesh>
+      {/* Hatch door, slightly proud of the hull */}
+      <mesh material={rocketSkin} position={[dX * 1.98, doorY, dZ * 1.98]} rotation={[0, doorRy, 0]} castShadow>
+        <boxGeometry args={[1.05, 1.85, 0.14]} />
+      </mesh>
+      {/* Porthole window */}
+      <group position={[dX * 2.06, doorY + 0.55, dZ * 2.06]} rotation={[0, doorRy, 0]}>
+        <mesh material={black} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.16, 0.16, 0.08, 16]} />
+        </mesh>
+      </group>
+      {/* Door seam handle */}
+      <mesh material={frame} position={[dX * 2.07 + doorLatX * 0.32, doorY - 0.1, dZ * 2.07 + doorLatZ * 0.32]} rotation={[0, doorRy, 0]}>
+        <boxGeometry args={[0.07, 0.4, 0.07]} />
+      </mesh>
+      {/* Glowing entry light above the hatch */}
+      <mesh material={windowGlow} position={[dX * 2.0, padTop + 2.42, dZ * 2.0]} rotation={[0, doorRy, 0]}>
+        <boxGeometry args={[0.9, 0.12, 0.08]} />
+      </mesh>
+      {/* Boarding steps up to the sill */}
+      <mesh material={padMat} position={[dX * 2.35, padTop + 0.18, dZ * 2.35]} rotation={[0, doorRy, 0]} castShadow>
+        <boxGeometry args={[1.25, 0.16, 0.55]} />
+      </mesh>
+      <mesh material={padMat} position={[dX * 2.85, padTop + 0.08, dZ * 2.85]} rotation={[0, doorRy, 0]} castShadow>
+        <boxGeometry args={[1.25, 0.16, 0.55]} />
+      </mesh>
+      {/* Handrails beside the steps */}
+      {[1, -1].map((sgn) => (
+        <group key={sgn}>
+          <mesh material={frame} position={[dX * 2.6 + doorLatX * sgn * 0.72, padTop + 0.62, dZ * 2.6 + doorLatZ * sgn * 0.72]}>
+            <cylinderGeometry args={[0.035, 0.035, 0.95, 8]} />
+          </mesh>
+          {/* Top bar runs along the walking direction (radial). */}
+          <group position={[dX * 2.6 + doorLatX * sgn * 0.72, padTop + 1.1, dZ * 2.6 + doorLatZ * sgn * 0.72]} rotation={[0, doorRy, 0]}>
+            <mesh material={frame} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.03, 0.03, 0.75, 8]} />
+            </mesh>
+          </group>
+        </group>
+      ))}
       {/* Launch pad + yellow safety ring */}
       <mesh material={padMat} position={[0, GROUND + 0.17, 0]} receiveShadow castShadow>
         <cylinderGeometry args={[6.2, 6.6, 0.36, 36]} />
