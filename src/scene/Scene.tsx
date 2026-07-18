@@ -173,11 +173,11 @@ function makeMarsHaloTexture() {
   const ctx = canvas.getContext("2d")!;
   const c = size / 2;
   const g = ctx.createRadialGradient(c, c, 0, c, c, c);
-  g.addColorStop(0.0, "rgba(255,170,110,0)");
-  g.addColorStop(0.42, "rgba(255,170,110,0)");
-  g.addColorStop(0.5, "rgba(255,180,120,0.32)");
-  g.addColorStop(0.62, "rgba(255,160,100,0.1)");
-  g.addColorStop(0.85, "rgba(255,150,90,0.02)");
+  g.addColorStop(0.0, "rgba(255,170,110,0.10)");
+  g.addColorStop(0.40, "rgba(255,175,115,0.16)");
+  g.addColorStop(0.48, "rgba(255,180,120,0.22)");
+  g.addColorStop(0.60, "rgba(255,160,100,0.10)");
+  g.addColorStop(0.80, "rgba(255,150,90,0.03)");
   g.addColorStop(1.0, "rgba(255,150,90,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
@@ -203,16 +203,21 @@ function MarsInSky() {
       <group ref={globeRef} rotation={[0.1, 1.2, 0.05]}>
         <mesh>
           <sphereGeometry args={[MARS_R, 48, 48]} />
-          <meshBasicMaterial map={texture} fog={false} toneMapped={false} color="#8f8f8f" />
+          {/* Lambert shading gives a soft cosine terminator from the scene
+              sun; the faint emissive keeps the night side from going fully
+              black so the limb fades out gradually instead of a hard edge. */}
+          <meshLambertMaterial map={texture} fog={false} emissive="#2a1409" />
         </mesh>
       </group>
-      <sprite position={[0, 0, 2]} scale={[haloScale, haloScale, 1]}>
+      <sprite position={[0, 0, 0]} scale={[haloScale, haloScale, 1]}>
         <spriteMaterial
           map={halo}
           transparent
           depthWrite={false}
+          depthTest={false}
           fog={false}
           blending={THREE.AdditiveBlending}
+          opacity={0.55}
         />
       </sprite>
     </group>
@@ -223,9 +228,9 @@ function MarsInSky() {
 // upper sky every few seconds, each a camera-facing elongated sprite
 // with a painted head-to-tail gradient. toneMapped:false lets Bloom put
 // a hot core on them.
-const METEOR_COUNT = 5;
-const METEOR_MIN_WAIT = 1.5;
-const METEOR_MAX_WAIT = 7;
+const METEOR_COUNT = 14;
+const METEOR_MIN_WAIT = 0.6;
+const METEOR_MAX_WAIT = 4;
 
 function makeMeteorTexture() {
   const w = 256;
@@ -439,7 +444,7 @@ function HorizonGlow() {
 // continuous neon rails that follow the terrain around the full circle.
 // toneMapped:false + Bloom makes the rails read as real neon tubes.
 const FENCE_R = 122;
-const FENCE_POSTS = 96;
+const FENCE_POSTS = 144;
 const FENCE_CURVE_SAMPLES = 220;
 
 function fenceRailCurve(yOffset: number) {
@@ -489,11 +494,14 @@ function FutureFence() {
       const z = Math.sin(a) * FENCE_R;
       const y = sampleTerrainHeight(x, z);
       q.setFromAxisAngle(up, -a);
-      m.compose(new THREE.Vector3(x, y + 0.85, z), q, new THREE.Vector3(1, 1, 1));
+      // Post spans well below the terrain sample and above the top rail so
+      // rail-curve smoothing can never leave a floating rail with no post,
+      // and the post stays visible from both sides at a distance.
+      m.compose(new THREE.Vector3(x, y + 0.65, z), q, new THREE.Vector3(1, 1, 1));
       posts.push(m.clone());
       // Light strip on the inward face of the post.
-      const ix = Math.cos(a) * (FENCE_R - 0.1);
-      const iz = Math.sin(a) * (FENCE_R - 0.1);
+      const ix = Math.cos(a) * (FENCE_R - 0.24);
+      const iz = Math.sin(a) * (FENCE_R - 0.24);
       m.compose(
         new THREE.Vector3(ix, y + 0.95, iz),
         q,
@@ -542,11 +550,11 @@ function FutureFence() {
         <meshStandardMaterial color="#171a22" roughness={0.6} metalness={0.6} />
       </mesh>
       <instancedMesh ref={postRef} args={[undefined, undefined, FENCE_POSTS]} castShadow>
-        <boxGeometry args={[0.18, 1.7, 0.18]} />
+        <boxGeometry args={[0.3, 2.5, 0.3]} />
         <meshStandardMaterial color="#14161c" roughness={0.55} metalness={0.65} />
       </instancedMesh>
       <instancedMesh ref={stripRef} args={[undefined, undefined, FENCE_POSTS]}>
-        <boxGeometry args={[0.035, 1.35, 0.035]} />
+        <boxGeometry args={[0.06, 1.5, 0.06]} />
         <meshBasicMaterial color="#4f9dff" toneMapped={false} fog={false} />
       </instancedMesh>
     </group>
