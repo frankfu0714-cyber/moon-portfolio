@@ -77,6 +77,22 @@ function makeRock(seed: number): THREE.BufferGeometry {
       }
     }
 
+    // High-frequency grain over the whole surface — critically this runs
+    // AFTER the fracture cuts, so the flat chip facets pick up rough
+    // regolith texture instead of reading as polished glass.
+    {
+      const g1 =
+        Math.sin(v.x * 23.7 + seed * 5.1) *
+        Math.sin(v.y * 27.3 + seed * 3.7) *
+        Math.sin(v.z * 25.1 + seed * 7.9);
+      const g2 =
+        Math.sin(v.x * 51.3 + seed * 2.3) *
+        Math.sin(v.y * 47.7 + seed * 9.1) *
+        Math.sin(v.z * 55.9 + seed * 4.7);
+      const grain = g1 * 0.035 + g2 * 0.016;
+      v.multiplyScalar(1 + grain);
+    }
+
     // Flatten the underside so the rock reads as sitting on the ground
     // rather than a floating boulder.
     if (v.y < 0) v.y *= 0.38;
@@ -121,7 +137,7 @@ export function RockField() {
             ),
           );
         }
-        const y = ground - r.scaleY * 0.05;
+        const y = ground - r.scaleY * 0.22;
         return (
           <mesh
             key={i}
