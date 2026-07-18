@@ -75,6 +75,27 @@ const SOLID_CIRCLES = [
   { x: -22.79, z: 19.02, r: 1.5 },
   // Rocket body only — the pad is walkable so you can stroll up to the hatch.
   { x: 34, z: -20, r: 2.6 },
+  // Neon lattice tower at (-12, -36): truss core plus a ring of circles
+  // tracing the perimeter fence, with a gap at the front gate (+Z side).
+  { x: -12, z: -36, r: 3.1 },
+  // Fence back (z = -42).
+  { x: -16.5, z: -42, r: 1.6 },
+  { x: -13.5, z: -42, r: 1.6 },
+  { x: -10.5, z: -42, r: 1.6 },
+  { x: -7.5, z: -42, r: 1.6 },
+  // Fence left (x = -18).
+  { x: -18, z: -40.5, r: 1.6 },
+  { x: -18, z: -37.5, r: 1.6 },
+  { x: -18, z: -34.5, r: 1.6 },
+  { x: -18, z: -31.5, r: 1.6 },
+  // Fence right (x = -6).
+  { x: -6, z: -40.5, r: 1.6 },
+  { x: -6, z: -37.5, r: 1.6 },
+  { x: -6, z: -34.5, r: 1.6 },
+  { x: -6, z: -31.5, r: 1.6 },
+  // Fence front (z = -30), gate open at |x + 12| < 1.3.
+  { x: -15.65, z: -30, r: 2.35 },
+  { x: -8.35, z: -30, r: 2.35 },
 ];
 
 // Roam-mode obstacle avoidance: everything solid (structures + tall
