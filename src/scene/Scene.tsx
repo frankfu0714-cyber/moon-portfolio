@@ -401,12 +401,12 @@ function SunInSky() {
 // a vertical canvas gradient centered just above the equator.
 function makeHorizonTexture() {
   const canvas = document.createElement("canvas");
-  canvas.width = 4;
-  canvas.height = 512;
+  canvas.width = 256;
+  canvas.height = 1024;
   const ctx = canvas.getContext("2d")!;
-  const g = ctx.createLinearGradient(0, 0, 0, 512);
-  // canvas y=0 is the dome's zenith (v=1), y=512 the nadir (v=0);
-  // the horizon sits at y=256.
+  const g = ctx.createLinearGradient(0, 0, 0, 1024);
+  // canvas y=0 is the dome's zenith (v=1), y=1024 the nadir (v=0);
+  // the horizon sits at y=512.
   g.addColorStop(0.0, "rgba(150,190,235,0)");
   g.addColorStop(0.4, "rgba(150,190,235,0)");
   g.addColorStop(0.46, "rgba(150,190,235,0.05)");
@@ -416,7 +416,18 @@ function makeHorizonTexture() {
   g.addColorStop(0.66, "rgba(150,190,235,0)");
   g.addColorStop(1.0, "rgba(150,190,235,0)");
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 4, 512);
+  ctx.fillRect(0, 0, 256, 1024);
+  // The glow is so subtle that 8-bit alpha quantizes into visible
+  // horizontal bands across the whole sky; a whisper of per-pixel
+  // noise dithers the steps away.
+  const img = ctx.getImageData(0, 0, 256, 1024);
+  const d = img.data;
+  for (let i = 3; i < d.length; i += 4) {
+    if (d[i] > 0) {
+      d[i] = Math.max(0, Math.min(255, d[i] + Math.round(Math.random() * 6 - 3)));
+    }
+  }
+  ctx.putImageData(img, 0, 0);
   const tex = new THREE.CanvasTexture(canvas);
   return tex;
 }
@@ -549,11 +560,14 @@ function FutureFence() {
       <mesh geometry={railDark}>
         <meshStandardMaterial color="#171a22" roughness={0.6} metalness={0.6} />
       </mesh>
-      <instancedMesh ref={postRef} args={[undefined, undefined, FENCE_POSTS]} castShadow>
+      {/* frustumCulled=false: an instanced mesh's bounding sphere is the
+          single post geometry at the origin, so the whole ring of posts
+          vanished whenever that tiny sphere left the frustum. */}
+      <instancedMesh ref={postRef} args={[undefined, undefined, FENCE_POSTS]} castShadow frustumCulled={false}>
         <boxGeometry args={[0.3, 2.5, 0.3]} />
         <meshStandardMaterial color="#14161c" roughness={0.55} metalness={0.65} />
       </instancedMesh>
-      <instancedMesh ref={stripRef} args={[undefined, undefined, FENCE_POSTS]}>
+      <instancedMesh ref={stripRef} args={[undefined, undefined, FENCE_POSTS]} frustumCulled={false}>
         <boxGeometry args={[0.06, 1.5, 0.06]} />
         <meshBasicMaterial color="#4f9dff" toneMapped={false} fog={false} />
       </instancedMesh>
