@@ -8,7 +8,7 @@ import { DustPuffs, type DustPuffsHandle } from "./DustPuffs";
 import { SafeAsset } from "./SafeAsset";
 import { useSceneStore } from "@/lib/store";
 import { WAYPOINTS, type WaypointId } from "@/lib/waypoints";
-import { sampleSlope, sampleTerrainHeight } from "@/lib/terrain";
+import { sampleMeshHeight, sampleSlope } from "@/lib/terrain";
 import { resolveRockCollision } from "@/lib/rocks";
 
 const WALK_SPEED = 1.2; // units/sec — chill vibe
@@ -117,10 +117,13 @@ export function AstronautController() {
       dragging.current = false;
     };
     const onWheel = (e: WheelEvent) => {
+      // Exponential zoom feels uniform whether close or far; deltaMode 1
+      // (line-based wheels, e.g. Firefox) reports ~1/33 of pixel deltas.
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
       orbitDist.current = THREE.MathUtils.clamp(
-        orbitDist.current + e.deltaY * 0.01,
-        3.2,
-        13,
+        orbitDist.current * Math.exp(dy * 0.0012),
+        2.4,
+        22,
       );
     };
     window.addEventListener("pointerdown", onPointerDown);
@@ -232,20 +235,15 @@ export function AstronautController() {
       }
     }
 
-    // Sample the surface and low-pass toward it so the astronaut tracks
-    // crater rims and dunes without jitter on high-frequency vertices.
-    // Take the MAX over a small footprint: the rendered mesh linearly
-    // interpolates between vertices, so on steep crater walls a single
-    // centre sample can sit below the visible surface and the boots sink
-    // into the regolith. The footprint max keeps the feet on top.
+    // Ground the boots on the *rendered* surface: sampleMeshHeight walks
+    // the exact triangle of the displaced PlaneGeometry under the
+    // astronaut, so the feet match the pixels the player sees -- no
+    // sinking on steep crater walls, no hovering next to ridges (the old
+    // footprint-max hack floated the feet wherever a neighbouring sample
+    // caught higher ground).
     const px = astronaut.position.x;
     const pz = astronaut.position.z;
-    let groundY = sampleTerrainHeight(px, pz);
-    const FOOT_R = 0.42;
-    groundY = Math.max(groundY, sampleTerrainHeight(px + FOOT_R, pz));
-    groundY = Math.max(groundY, sampleTerrainHeight(px - FOOT_R, pz));
-    groundY = Math.max(groundY, sampleTerrainHeight(px, pz + FOOT_R));
-    groundY = Math.max(groundY, sampleTerrainHeight(px, pz - FOOT_R));
+    const groundY = sampleMeshHeight(px, pz);
     const targetY = groundY + FOOT_OFFSET;
 
     // Low-gravity jump: Space launches, a simple ballistic arc brings the
@@ -379,7 +377,7 @@ export function AstronautController() {
     const desZ = pivotZ - Math.cos(orbitYaw.current) * cosP * orbitDist.current;
     let desY = pivotY + Math.sin(orbitPitch.current) * orbitDist.current;
     // Never sink the camera into the regolith.
-    const floorY = sampleTerrainHeight(desX, desZ) + 0.5;
+    const floorY = sampleMeshHeight(desX, desZ) + 0.5;
     if (desY < floorY) desY = floorY;
 
     camPos.current.x = THREE.MathUtils.damp(camPos.current.x, desX, camLerpPos, dt);
