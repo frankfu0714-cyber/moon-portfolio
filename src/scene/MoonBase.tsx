@@ -342,7 +342,10 @@ function Rocket() {
   // Entrance hatch: faces the spawn plaza (world origin) so you walk up
   // to it naturally. Recessed dark frame, white hatch with a porthole,
   // a glowing entry light, boarding steps and handrails.
-  const doorA = Math.atan2(20, -34); // azimuth from pad center toward spawn
+  // Azimuth for the hatch: roughly toward spawn but rotated to 190 deg so
+  // it sits on clear hull between the 150-deg fin and the 225-deg leg
+  // (it used to land exactly on the fin).
+  const doorA = Math.atan2(-6, -34);
   const doorRy = Math.PI / 2 - doorA; // rotates a box's +z face onto that azimuth
   const dX = Math.cos(doorA);
   const dZ = Math.sin(doorA);
