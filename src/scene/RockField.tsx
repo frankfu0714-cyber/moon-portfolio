@@ -162,6 +162,7 @@ export function RockField() {
               roughness={0.96}
               metalness={0}
               vertexColors
+              flatShading
             />
           </mesh>
         );

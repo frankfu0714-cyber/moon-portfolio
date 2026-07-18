@@ -10,6 +10,7 @@ import { MoonSurface } from "./MoonSurface";
 import { EarthInSky } from "./EarthInSky";
 import { WaypointFlag } from "./WaypointFlag";
 import { MoonBase } from "./MoonBase";
+import { Cybertruck } from "./Cybertruck";
 import { SafeAsset } from "./SafeAsset";
 import { WAYPOINTS } from "@/lib/waypoints";
 import { sampleTerrainHeight } from "@/lib/terrain";
@@ -397,48 +398,71 @@ function SunInSky() {
 }
 
 // Soft light-blue glow hugging the horizon all around, like the faint
-// haze above the hills in the reference frame. A big back-side dome with
-// a vertical canvas gradient centered just above the equator.
-function makeHorizonTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 4096;
-  const ctx = canvas.getContext("2d")!;
-  const g = ctx.createLinearGradient(0, 0, 0, 4096);
-  // canvas y=0 is the dome's zenith (v=1), y=4096 the nadir (v=0);
-  // the horizon sits at y=2048. The old 256x1024 canvas carried baked
-  // per-pixel dither noise; bilinear magnification (each texel spanned
-  // ~1.4 degrees of sky) smeared it into wavy brushstroke streaks. 4x
-  // the resolution and no baked noise keeps the gradient clean. The
-  // glow is also dimmer and fades out sooner so the sky reads darker
-  // toward the edge of the map.
-  g.addColorStop(0.0, "rgba(150,190,235,0)");
-  g.addColorStop(0.42, "rgba(150,190,235,0)");
-  g.addColorStop(0.47, "rgba(150,190,235,0.03)");
-  g.addColorStop(0.5, "rgba(165,200,240,0.08)");
-  g.addColorStop(0.53, "rgba(175,206,242,0.11)");
-  g.addColorStop(0.57, "rgba(160,196,238,0.05)");
-  g.addColorStop(0.63, "rgba(150,190,235,0)");
-  g.addColorStop(1.0, "rgba(150,190,235,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 512, 4096);
-  const tex = new THREE.CanvasTexture(canvas);
-  return tex;
-}
+// haze above the hills in the reference frame. Rendered as a big
+// back-side dome with a per-fragment shader gradient. The prior canvas
+// texture (even at 4x resolution) still showed wavy brushstroke bands
+// because bilinear texture magnification interpolates across sphere UVs
+// unevenly and the 8-bit gradient quantized into visible steps in the
+// darker falloff regions. Computing the gradient per-fragment from
+// world-space view direction eliminates the texture entirely, and an
+// Interleaved-Gradient-Noise dither adds ~1/255 of high-frequency jitter
+// so the gradient's 8-bit output can't quantize into visible bands.
+const HORIZON_VERTEX = /* glsl */ `
+  varying vec3 vDir;
+  void main() {
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vDir = normalize(wp.xyz);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const HORIZON_FRAGMENT = /* glsl */ `
+  precision highp float;
+  varying vec3 vDir;
+  uniform vec3 uColor;
+  uniform float uIntensity;
+
+  void main() {
+    float y = vDir.y;
+    float d = abs(y);
+    // Wide falloff * inner brightening = a soft haze that peaks on the
+    // horizon and fades to nothing before it reaches the zenith or the
+    // nadir. Matches the original canvas gradient's shape (peak ~0.11
+    // alpha at y=0, gone by |y| > 0.35).
+    float outer = smoothstep(0.35, 0.10, d);
+    float inner = smoothstep(0.15, 0.02, d);
+    float band = outer * (0.35 + 0.65 * inner) * uIntensity;
+    // IGN dither - a 1/255 spatial jitter that destroys banding without
+    // introducing visible noise.
+    float ign = fract(52.9829189 * fract(
+      0.06711056 * gl_FragCoord.x + 0.00583715 * gl_FragCoord.y
+    ));
+    band += (ign - 0.5) / 255.0;
+    gl_FragColor = vec4(uColor * band, 1.0);
+  }
+`;
 
 function HorizonGlow() {
-  const texture = useMemo(() => makeHorizonTexture(), []);
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        vertexShader: HORIZON_VERTEX,
+        fragmentShader: HORIZON_FRAGMENT,
+        uniforms: {
+          uColor: { value: new THREE.Color("#a5cef2") },
+          uIntensity: { value: 0.11 },
+        },
+        transparent: true,
+        depthWrite: false,
+        side: THREE.BackSide,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+      }),
+    [],
+  );
   return (
-    <mesh renderOrder={-1}>
-      <sphereGeometry args={[290, 48, 48]} />
-      <meshBasicMaterial
-        map={texture}
-        transparent
-        side={THREE.BackSide}
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-        fog={false}
-      />
+    <mesh renderOrder={-1} material={material}>
+      <sphereGeometry args={[290, 64, 64]} />
     </mesh>
   );
 }
@@ -666,6 +690,8 @@ export function Scene() {
       <SafeAsset label="lander">
         <MoonLander />
       </SafeAsset>
+
+      <Cybertruck />
 
       {/* Visible sun glare sprite along the key light's direction (10x
           the light position) so every shadow points away from it. */}
