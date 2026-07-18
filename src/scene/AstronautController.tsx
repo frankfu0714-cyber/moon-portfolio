@@ -26,6 +26,25 @@ const TURN_LERP = 6;
 const JUMP_SPEED = 3.1;
 const GRAVITY = 5.2;
 
+// Auto-roam: the astronaut picks a random reachable point, strolls to it,
+// pauses a beat, picks another. Any manual WASD input overrides for as
+// long as it's held; roam resumes when the keys are released.
+const ROAM_SPEED = 1.15;
+const ROAM_ARRIVE_DIST = 2.2;
+const ROAM_MIN_R = 12;
+const ROAM_MAX_R = 85;
+const ROAM_PAUSE_MIN = 1.2;
+const ROAM_PAUSE_MAX = 4.5;
+const ROAM_STUCK_TIME = 4; // repick target if barely moving this long
+
+// Boot-thruster float: hover height above the sampled ground, with a slow
+// bob. floatBlend eases the transition both ways.
+const FLOAT_HEIGHT = 1.15;
+const FLOAT_BOB_AMP = 0.09;
+const FLOAT_BOB_HZ = 0.55;
+const FLOAT_BLEND_LAMBDA = 3.2;
+const FLOAT_SPEED = 2.1; // gliding on jets is quicker than a stroll
+
 // Keep the astronaut on the detailed part of the terrain cap, well away
 // from where the curvature drop-off gets steep.
 const WALK_BOUND = 120;
@@ -40,8 +59,16 @@ const LANDER_RADIUS = 3.6;
 // MoonBase.tsx placements).
 const SOLID_CIRCLES = [
   { x: LANDER_X, z: LANDER_Z, r: LANDER_RADIUS },
-  { x: -33, z: 21, r: 6 },
-  { x: -24, z: 19.5, r: 6 },
+  // Station habitat modules (narrow strips of small circles along each
+  // cylinder instead of two huge discs, so the ground nearby is walkable).
+  { x: -34.04, z: 22.21, r: 2.0 },
+  { x: -32.28, z: 21.25, r: 2.0 },
+  { x: -30.53, z: 20.29, r: 2.0 },
+  { x: -28.52, z: 20.21, r: 1.8 },
+  { x: -27.11, z: 19.45, r: 1.8 },
+  { x: -25.71, z: 18.68, r: 1.8 },
+  // Vertical airlock tank.
+  { x: -22.79, z: 19.02, r: 1.5 },
   { x: 34, z: -20, r: 6.8 },
 ];
 
@@ -82,6 +109,13 @@ export function AstronautController() {
   const orbitPitch = useRef(0.28);
   const orbitDist = useRef(CAM_DISTANCE);
   const dragging = useRef(false);
+  // Auto-roam state.
+  const roamTarget = useRef<{ x: number; z: number } | null>(null);
+  const roamPause = useRef(0);
+  const roamStuck = useRef(0);
+  // Float mode blend (0 = walking, 1 = hovering on the boot jets).
+  const floatBlend = useRef(0);
+  const floatTime = useRef(0);
   const tmpVec = useRef(new THREE.Vector3());
   const tmpForward = useRef(new THREE.Vector3());
   const tmpDesired = useRef(new THREE.Vector3());
@@ -145,14 +179,32 @@ export function AstronautController() {
     const astronaut = astronautRef.current?.group;
     if (!astronaut) return;
 
-    const { walkInput, activePanel } = useSceneStore.getState();
+    const { walkInput, activePanel, autoRoam, floatMode } =
+      useSceneStore.getState();
     const inputActive = !activePanel;
+    const manualActive =
+      inputActive && (walkInput.forward !== 0 || walkInput.strafe !== 0);
+
+    // Ease the float blend; floatTime drives the hover bob.
+    floatBlend.current = THREE.MathUtils.damp(
+      floatBlend.current,
+      floatMode ? 1 : 0,
+      FLOAT_BLEND_LAMBDA,
+      dt,
+    );
+    floatTime.current += dt;
 
     // Slew the speed cap (and runBlend) toward the target so entering/
     // exiting run doesn't snap the velocity or the animation amplitude.
     // ~150ms transition matches SPEED_CAP_LAMBDA.
     const wantsRun = inputActive && walkInput.running;
-    const targetCap = wantsRun ? RUN_SPEED : WALK_SPEED;
+    const baseCap = wantsRun ? RUN_SPEED : WALK_SPEED;
+    // Hovering glides a touch faster than a stroll.
+    const targetCap = THREE.MathUtils.lerp(
+      baseCap,
+      Math.max(baseCap, FLOAT_SPEED),
+      floatBlend.current,
+    );
     speedCap.current = THREE.MathUtils.damp(
       speedCap.current,
       targetCap,
@@ -177,13 +229,47 @@ export function AstronautController() {
     );
 
     const desired = tmpDesired.current.set(0, 0, 0);
-    if (inputActive) {
+    if (manualActive) {
       desired
         .addScaledVector(tmpForward.current, walkInput.forward)
         .addScaledVector(right, walkInput.strafe);
       if (desired.lengthSq() > 1) desired.normalize();
+      desired.multiplyScalar(speedCap.current);
+    } else if (autoRoam && inputActive) {
+      // Wander: head for the current target, pausing between legs.
+      if (roamPause.current > 0) {
+        roamPause.current -= dt;
+      } else {
+        if (!roamTarget.current) roamTarget.current = pickRoamTarget(astronaut.position);
+        const t = roamTarget.current;
+        const dx = t.x - astronaut.position.x;
+        const dz = t.z - astronaut.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < ROAM_ARRIVE_DIST) {
+          roamTarget.current = null;
+          roamPause.current =
+            ROAM_PAUSE_MIN + Math.random() * (ROAM_PAUSE_MAX - ROAM_PAUSE_MIN);
+        } else {
+          const roamCap = Math.max(
+            ROAM_SPEED,
+            ROAM_SPEED * (1 + floatBlend.current),
+          );
+          desired.set(dx / dist, 0, dz / dist).multiplyScalar(roamCap);
+          // If something (rock, module) keeps us pinned, give up on this
+          // target and pick a fresh one.
+          const speedNow = Math.hypot(velocity.current.x, velocity.current.z);
+          if (speedNow < 0.25) {
+            roamStuck.current += dt;
+            if (roamStuck.current > ROAM_STUCK_TIME) {
+              roamStuck.current = 0;
+              roamTarget.current = null;
+            }
+          } else {
+            roamStuck.current = 0;
+          }
+        }
+      }
     }
-    desired.multiplyScalar(speedCap.current);
 
     // Damped velocity toward desired.
     velocity.current.x = THREE.MathUtils.damp(
@@ -244,11 +330,17 @@ export function AstronautController() {
     const px = astronaut.position.x;
     const pz = astronaut.position.z;
     const groundY = sampleMeshHeight(px, pz);
-    const targetY = groundY + FOOT_OFFSET;
+    const hoverLift =
+      floatBlend.current *
+      (FLOAT_HEIGHT +
+        Math.sin(floatTime.current * Math.PI * 2 * FLOAT_BOB_HZ) * FLOAT_BOB_AMP);
+    const targetY = groundY + FOOT_OFFSET + hoverLift;
+    const floating = floatBlend.current > 0.5;
 
     // Low-gravity jump: Space launches, a simple ballistic arc brings the
-    // astronaut back to the sampled terrain height.
-    if (!airborne.current && inputActive && walkInput.jumping) {
+    // astronaut back to the sampled terrain height. (Disabled while the
+    // boot jets carry the astronaut.)
+    if (!airborne.current && inputActive && walkInput.jumping && !floating) {
       airborne.current = true;
       vy.current = JUMP_SPEED;
       astronaut.position.y = Math.max(astronaut.position.y, targetY);
@@ -276,7 +368,13 @@ export function AstronautController() {
     } else {
       astronaut.position.y += (targetY - astronaut.position.y) * HEIGHT_LERP;
     }
+    if (airborne.current && floating) {
+      // Thrusters ignited mid-jump — the jets take over the descent.
+      airborne.current = false;
+      vy.current = 0;
+    }
     astronaut.userData.airborne = airborne.current;
+    astronaut.userData.floatBlend = floatBlend.current;
 
     // Report speed to the astronaut mesh for animation blending.
     const speedSq =
@@ -286,6 +384,19 @@ export function AstronautController() {
     // Pass the run envelope so the walk cycle can pump faster / bigger.
     astronaut.userData.runBlend = runBlend.current;
 
+    // Thruster wash: while hovering, the jets kick a light dust ring off
+    // the ground below.
+    if (floating) {
+      idleDustTimer.current += dt;
+      if (idleDustTimer.current > 0.22) {
+        idleDustTimer.current = 0;
+        dustRef.current?.ambient(
+          astronaut.position.x + (Math.random() - 0.5) * 0.5,
+          groundY,
+          astronaut.position.z + (Math.random() - 0.5) * 0.5,
+        );
+      }
+    } else
     // Idle ambient dust — subtle single particle every ~0.9s when stationary.
     if (speedSq < 0.02) {
       idleDustTimer.current += dt;
@@ -394,6 +505,7 @@ export function AstronautController() {
 
   const handleFootstep = (pos: THREE.Vector3) => {
     if (airborne.current) return; // no footfalls mid-air
+    if (floatBlend.current > 0.3) return; // no footfalls on thrusters
     dustRef.current?.puff(pos.x, pos.y - FOOT_OFFSET, pos.z);
   };
 
@@ -410,6 +522,27 @@ export function AstronautController() {
       <DustPuffs ref={dustRef} />
     </>
   );
+}
+
+// Pick a random wander destination on the walkable cap, rejecting spots
+// inside any solid footprint (lander, base modules, rocket pad).
+function pickRoamTarget(from: THREE.Vector3): { x: number; z: number } {
+  for (let tries = 0; tries < 12; tries++) {
+    const ang = Math.random() * Math.PI * 2;
+    const r = ROAM_MIN_R + Math.random() * (ROAM_MAX_R - ROAM_MIN_R);
+    const x = from.x + Math.cos(ang) * r;
+    const z = from.z + Math.sin(ang) * r;
+    if (Math.hypot(x, z) > WALK_BOUND * 0.9) continue;
+    let blocked = false;
+    for (const sc of SOLID_CIRCLES) {
+      if (Math.hypot(x - sc.x, z - sc.z) < sc.r + 2) {
+        blocked = true;
+        break;
+      }
+    }
+    if (!blocked) return { x, z };
+  }
+  return { x: 0, z: 0 }; // safe fallback: spawn plaza
 }
 
 // Damp an angle across the -PI/+PI wrap-around.
