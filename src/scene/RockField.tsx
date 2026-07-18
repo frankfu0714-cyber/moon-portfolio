@@ -123,80 +123,13 @@ export function RockField() {
     [],
   );
 
-  // One merged terrain-conforming dark ring per rock: fakes the contact
-  // occlusion the shadow map can't resolve, killing the bright strip
-  // between each rock's base and its cast shadow.
-  const contactShadow = useMemo(() => {
-    const SEG = 48;
-    // Radial profile: strong right under the rock and at its silhouette
-    // (f ~ 1) where the bright strip used to leak, fading out beyond.
-    const RIMS: [number, number][] = [
-      [0.35, 0.8],
-      [0.75, 0.68],
-      [1.08, 0.42],
-      [1.5, 0],
-    ];
-    const positions: number[] = [];
-    const colors: number[] = [];
-    const indices: number[] = [];
-    for (const r of ROCKS) {
-      const cosY = Math.cos(r.rotY);
-      const sinY = Math.sin(r.rotY);
-      const base = positions.length / 3;
-      for (let k = 0; k <= SEG; k++) {
-        const a = (k / SEG) * Math.PI * 2;
-        const ux = Math.cos(a);
-        const uz = Math.sin(a);
-        // Sample all rim heights first so we can measure the local slope.
-        const pts: [number, number, number][] = [];
-        for (const [f] of RIMS) {
-          const lx = ux * r.scaleX * f;
-          const lz = uz * r.scaleZ * f;
-          const wx = r.x + lx * cosY + lz * sinY;
-          const wz = r.z - lx * sinY + lz * cosY;
-          pts.push([wx, sampleTerrainHeight(wx, wz), wz]);
-        }
-        // On cliffs/steep mounds the ring quads used to hang in the air
-        // as hard dark triangles — fade the whole spoke out with slope.
-        let steep = 0;
-        for (let j = 0; j + 1 < pts.length; j++) {
-          const dr =
-            (RIMS[j + 1][0] - RIMS[j][0]) * Math.max(r.scaleX, r.scaleZ);
-          steep = Math.max(steep, Math.abs(pts[j + 1][1] - pts[j][1]) / dr);
-        }
-        const fade = THREE.MathUtils.clamp(1 - (steep - 0.55) / 0.5, 0, 1);
-        for (let j = 0; j < RIMS.length; j++) {
-          positions.push(pts[j][0], pts[j][1] + 0.02, pts[j][2]);
-          colors.push(0, 0, 0, RIMS[j][1] * fade);
-        }
-      }
-      const L = RIMS.length;
-      for (let k = 0; k < SEG; k++) {
-        for (let j = 0; j + 1 < L; j++) {
-          const i0 = base + k * L + j;
-          const i1 = base + (k + 1) * L + j;
-          indices.push(i0, i0 + 1, i1, i0 + 1, i1 + 1, i1);
-        }
-      }
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    g.setAttribute("color", new THREE.Float32BufferAttribute(colors, 4));
-    g.setIndex(indices);
-    return g;
-  }, []);
+  // The old merged contact-shadow ring kept sprouting hard dark
+  // triangles wherever rocks clustered or the terrain bucked under a
+  // rim quad. Rocks are now sunk deep enough that their own vertex AO
+  // plus the shadow map ground them, so the fake ring is gone for good.
 
   return (
     <group>
-      <mesh geometry={contactShadow} renderOrder={1}>
-        <meshBasicMaterial
-          vertexColors
-          transparent
-          depthWrite={false}
-          polygonOffset
-          polygonOffsetFactor={-2}
-        />
-      </mesh>
       {ROCKS.map((r, i) => {
         // Ground each rock against the LOWEST terrain point under its
         // footprint (center + ring samples), then bury it a bit. Sampling
