@@ -108,6 +108,8 @@ const SOLID_CIRCLES = [
   { x: 3.74, z: 15.09, r: 1.1 },
   { x: 4.86, z: 17.87, r: 1.1 },
   { x: 5.97, z: 20.66, r: 1.1 },
+  // Cybertruck (mirrors CYBERTRUCK_X/Z in Cybertruck.tsx).
+  { x: 8, z: 8, r: 2.4 },
 ];
 
 // Roam-mode obstacle avoidance: everything solid (structures + tall
