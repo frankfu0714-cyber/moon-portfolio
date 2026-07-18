@@ -637,6 +637,7 @@ export function Scene() {
         shadow-camera-near={5}
         shadow-camera-far={300}
         shadow-bias={-0.0004}
+        shadow-normalBias={0.05}
       />
       <directionalLight
         position={[-20, 12, -30]}
