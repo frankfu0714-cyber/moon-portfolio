@@ -749,9 +749,12 @@ function NeonTower() {
 
 // Vertical solar-sail farm, per Frank's Solestial reference: tall dark
 // red-tinted cell sheets standing upright like sails, each on a thin
-// mast with tripod legs, in two parallel rows on flat ground near
-// (8, 15). Every sail faces the sun azimuth (rotY = 1.95 rad matches
-// the key light at [45, 13, -18]).
+// mast with tripod legs, in two parallel rows on flat ground west of
+// the lander at (10, 16). Rows are shifted 5 units perpendicular to
+// the row axis so both rows clear the lander's 3.6-unit footprint
+// (innermost mast sits ~5 units from lander center, leaving daylight
+// between the panels and the descent stage). Every sail faces the sun
+// azimuth (rotY = 1.95 rad matches the key light at [45, 13, -18]).
 const sailCell = new THREE.MeshStandardMaterial({
   color: "#4a1d22",
   metalness: 0.75,
@@ -761,14 +764,14 @@ const sailCell = new THREE.MeshStandardMaterial({
 
 const SAIL_ROT_Y = 1.95;
 const SAIL_POSITIONS: [number, number][] = [
-  [5.03, 11.34],
-  [6.14, 14.13],
-  [7.26, 16.91],
-  [8.37, 19.7],
-  [7.63, 10.3],
-  [8.74, 13.09],
-  [9.86, 15.87],
-  [10.97, 18.66],
+  [0.03, 13.34],
+  [1.14, 16.13],
+  [2.26, 18.91],
+  [3.37, 21.7],
+  [2.63, 12.3],
+  [3.74, 15.09],
+  [4.86, 17.87],
+  [5.97, 20.66],
 ];
 
 function SolarSail({ x, z }: { x: number; z: number }) {
