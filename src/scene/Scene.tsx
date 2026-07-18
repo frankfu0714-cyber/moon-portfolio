@@ -401,33 +401,27 @@ function SunInSky() {
 // a vertical canvas gradient centered just above the equator.
 function makeHorizonTexture() {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 1024;
+  canvas.width = 512;
+  canvas.height = 4096;
   const ctx = canvas.getContext("2d")!;
-  const g = ctx.createLinearGradient(0, 0, 0, 1024);
-  // canvas y=0 is the dome's zenith (v=1), y=1024 the nadir (v=0);
-  // the horizon sits at y=512.
+  const g = ctx.createLinearGradient(0, 0, 0, 4096);
+  // canvas y=0 is the dome's zenith (v=1), y=4096 the nadir (v=0);
+  // the horizon sits at y=2048. The old 256x1024 canvas carried baked
+  // per-pixel dither noise; bilinear magnification (each texel spanned
+  // ~1.4 degrees of sky) smeared it into wavy brushstroke streaks. 4x
+  // the resolution and no baked noise keeps the gradient clean. The
+  // glow is also dimmer and fades out sooner so the sky reads darker
+  // toward the edge of the map.
   g.addColorStop(0.0, "rgba(150,190,235,0)");
-  g.addColorStop(0.4, "rgba(150,190,235,0)");
-  g.addColorStop(0.46, "rgba(150,190,235,0.05)");
-  g.addColorStop(0.5, "rgba(170,205,242,0.14)");
-  g.addColorStop(0.53, "rgba(182,212,246,0.2)");
-  g.addColorStop(0.58, "rgba(168,203,240,0.1)");
-  g.addColorStop(0.66, "rgba(150,190,235,0)");
+  g.addColorStop(0.42, "rgba(150,190,235,0)");
+  g.addColorStop(0.47, "rgba(150,190,235,0.03)");
+  g.addColorStop(0.5, "rgba(165,200,240,0.08)");
+  g.addColorStop(0.53, "rgba(175,206,242,0.11)");
+  g.addColorStop(0.57, "rgba(160,196,238,0.05)");
+  g.addColorStop(0.63, "rgba(150,190,235,0)");
   g.addColorStop(1.0, "rgba(150,190,235,0)");
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 256, 1024);
-  // The glow is so subtle that 8-bit alpha quantizes into visible
-  // horizontal bands across the whole sky; a whisper of per-pixel
-  // noise dithers the steps away.
-  const img = ctx.getImageData(0, 0, 256, 1024);
-  const d = img.data;
-  for (let i = 3; i < d.length; i += 4) {
-    if (d[i] > 0) {
-      d[i] = Math.max(0, Math.min(255, d[i] + Math.round(Math.random() * 6 - 3)));
-    }
-  }
-  ctx.putImageData(img, 0, 0);
+  ctx.fillRect(0, 0, 512, 4096);
   const tex = new THREE.CanvasTexture(canvas);
   return tex;
 }
