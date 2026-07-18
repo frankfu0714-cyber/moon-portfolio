@@ -92,6 +92,8 @@ export const CRATERS: {
 export const FLAT_SITES: { x: number; z: number; r: number; h: number }[] = [
   { x: -30, z: 20, r: 15, h: 0.1 },
   { x: 34, z: -20, r: 13, h: 0.1 },
+  // Neon lattice tower site.
+  { x: -12, z: -36, r: 10, h: 0.1 },
 ];
 
 export function sampleTerrainHeight(x: number, z: number) {
