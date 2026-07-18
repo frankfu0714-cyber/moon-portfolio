@@ -4,11 +4,17 @@ import { useEffect, useMemo, useRef } from "react";
 import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { SafeAsset } from "./SafeAsset";
-import { sampleTerrainHeight } from "@/lib/terrain";
+import {
+  sampleTerrainHeight,
+  TERRAIN_RADIUS,
+  TERRAIN_SEGMENTS,
+} from "@/lib/terrain";
 import { RockField } from "./RockField";
 
-const RADIUS = 240;
-const SEGMENTS = 380;
+// Kept in lib/terrain.ts so the walk controller can sample the exact
+// same triangle mesh the GPU renders.
+const RADIUS = TERRAIN_RADIUS;
+const SEGMENTS = TERRAIN_SEGMENTS;
 
 // Applies the moon color texture to the shared material ref. Isolated so a
 // texture load failure (e.g. Vercel SSO redirect returning HTML instead of
