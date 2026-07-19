@@ -35,13 +35,13 @@ export const vehicleState = {
   heading: CYBERTRUCK_START_ROT_Y,
 };
 
-// Target world length + height. Real Cybertruck is 5.68m x 1.90m
-// (~3:1); the model's native silhouette is proportionally taller, so
-// we scale x/z off length but override y off height (3.6:1) to hit
-// the reference long-low stance.
+// Target world length + height. Length matches the reference photo's
+// long-low stance; height matches the astronaut (see Astronaut.tsx:
+// 1.80 * 0.97 ≈ 1.75 world units) so the driver appears sized to the
+// vehicle. Ratio comes out ~3.83:1, close to the real 3:1 spec once
+// you account for the tall canopy on this low-poly GLB.
 const TARGET_LENGTH = 6.7;
-const TARGET_LENGTH_TO_HEIGHT = 3.6;
-const TARGET_HEIGHT = TARGET_LENGTH / TARGET_LENGTH_TO_HEIGHT;
+const TARGET_HEIGHT = 1.75;
 
 // Drive tuning
 const BASE_SPEED = 4.5;
