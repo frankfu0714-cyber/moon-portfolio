@@ -691,7 +691,9 @@ export function Scene() {
         <MoonLander />
       </SafeAsset>
 
-      <Cybertruck />
+      <SafeAsset label="cybertruck">
+        <Cybertruck />
+      </SafeAsset>
 
       {/* Visible sun glare sprite along the key light's direction (10x
           the light position) so every shadow points away from it. */}
