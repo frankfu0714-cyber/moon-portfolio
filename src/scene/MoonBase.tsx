@@ -749,12 +749,14 @@ function NeonTower() {
 
 // Vertical solar-sail farm, per Frank's Solestial reference: tall dark
 // red-tinted cell sheets standing upright like sails, each on a thin
-// mast with tripod legs, in two parallel rows on flat ground west of
-// the lander at (10, 16). Rows are shifted 5 units perpendicular to
-// the row axis so both rows clear the lander's 3.6-unit footprint
-// (innermost mast sits ~5 units from lander center, leaving daylight
-// between the panels and the descent stage). Every sail faces the sun
-// azimuth (rotY = 1.95 rad matches the key light at [45, 13, -18]).
+// mast with tripod legs, in two parallel rows on flat ground NW of
+// the lander at (10, 16). The two rows sit 5 units apart perpendicular
+// to their length. Every sail faces the sun azimuth (rotY = 1.95 rad
+// matches the key light at [45, 13, -18]).
+//
+// Farm exported so AstronautController's collision circles pull from
+// the same source of truth — moving a sail here doesn't leave a stale
+// invisible collider behind.
 const sailCell = new THREE.MeshStandardMaterial({
   color: "#4a1d22",
   metalness: 0.75,
@@ -763,16 +765,25 @@ const sailCell = new THREE.MeshStandardMaterial({
 });
 
 const SAIL_ROT_Y = 1.95;
-const SAIL_POSITIONS: [number, number][] = [
-  [0.03, 13.34],
-  [1.14, 16.13],
-  [2.26, 18.91],
-  [3.37, 21.7],
-  [2.63, 12.3],
-  [3.74, 15.09],
-  [4.86, 17.87],
-  [5.97, 20.66],
+// Farm shifted Δ(-12, +5) from the old (0..6, 12..22) footprint to
+// (-12..-6, 17..27) — clear open terrain now sits between the farm
+// and the lander cluster on one side, and the Cybertruck spawn on
+// the other. Direction is roughly perpendicular to the row axis and
+// points away from the lander (Frank's ask).
+export const SAIL_POSITIONS: readonly (readonly [number, number])[] = [
+  [-11.97, 18.34],
+  [-10.86, 21.13],
+  [-9.74, 23.91],
+  [-8.63, 26.7],
+  [-9.37, 17.3],
+  [-8.26, 20.09],
+  [-7.14, 22.87],
+  [-6.03, 25.66],
 ];
+// Collision half-radius per mast — matches the tripod-foot span so
+// the astronaut can brush past the sail without an invisible-wall
+// feel while still blocking straight-through walks.
+export const SAIL_COLLISION_R = 1.1;
 
 function SolarSail({ x, z }: { x: number; z: number }) {
   const y = sampleTerrainHeight(x, z) - 0.04;
