@@ -75,14 +75,14 @@ const WIDTH_MULT = 0.75;
 // Hover tuning
 // Chassis bottom rides this many world units above the MAX terrain
 // height sampled under the truck's footprint (center + 4 wheel
-// contact points). Sampling the max — not just the center — is what
-// prevents the "sometimes touches ground" pattern Frank kept seeing:
-// on rolling terrain a ridge under a rear wheel could poke up
-// through the chassis while the center point was still clear.
-// 1.5 puts the sill at roughly astronaut-waist/chest height with a
-// safety margin over the previous 1.3 (which was too close on the
-// visible-mesh triangles that peak between vertex heights).
-const HOVER_HEIGHT = 1.5;
+// contact points). Sampling the max — not just the center — prevents
+// the "sometimes touches ground" pattern: on rolling terrain a ridge
+// under a rear wheel would poke up through the chassis while the
+// center sampled clear.
+// 1.2 sits the sill just above astronaut-waist height — clearly
+// hovering but subtler than the 1.5 pass Frank called too high. The
+// max-terrain sampling keeps this safe against triangle peaks.
+const HOVER_HEIGHT = 1.2;
 // Emitter positions come from the GLB's original wheel nodes (see
 // modelInfo.jetPositions). Real wheels sit at the outer edges of the
 // body — fine for wheels, but the hover thrusters read as too wide
@@ -245,6 +245,30 @@ export function Cybertruck() {
       wp.x * scale[0] * EMITTER_INWARD_MULT,
       wp.z * scale[2],
     ]);
+    // Enforce X-mirror symmetry across the truck's centerline. The
+    // GLB's wheel nodes aren't perfectly mirrored, so the raw
+    // snapshot has the right-side pair slightly inboard of the left
+    // pair — visible as a lopsided flame rectangle from behind.
+    // Pair the 4 emitters by Z (front axle vs rear axle) and force
+    // each pair to x = ±max(|xL|, |xR|), z = average.
+    if (jetPositions.length === 4) {
+      const sorted = jetPositions.slice().sort((a, b) => a[1] - b[1]);
+      for (let i = 0; i < 2; i++) {
+        const pair = sorted.slice(i * 2, i * 2 + 2);
+        // Order by X so pair[0] is the left (smaller X), pair[1] the right.
+        if (pair[0][0] > pair[1][0]) {
+          const tmp = pair[0];
+          pair[0] = pair[1];
+          pair[1] = tmp;
+        }
+        const maxAbs = Math.max(Math.abs(pair[0][0]), Math.abs(pair[1][0]));
+        const avgZ = (pair[0][1] + pair[1][1]) / 2;
+        pair[0][0] = -maxAbs;
+        pair[1][0] = maxAbs;
+        pair[0][1] = avgZ;
+        pair[1][1] = avgZ;
+      }
+    }
     return { scene, scale, jetPositions };
   }, [gltf.scene]);
 
