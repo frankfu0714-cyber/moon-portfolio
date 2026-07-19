@@ -673,17 +673,19 @@ export function Cybertruck() {
               <HoverJet
                 intensityRef={jetIntensityRef}
                 stretchY={JET_STRETCH_Y}
-                // Big round core ball at the emitter (Bloom picks it
-                // up as a bright cyan-blue light source). Matches the
-                // astronaut boot-jet look, just larger for the truck.
-                coreScale={1.9}
-                // Every jet gets its own pointLight so all four
-                // nozzles light the terrain equally — not just the
-                // front-left. Dialed to ~0.3 of the astronaut-boot
-                // brightness; four combined roughly match a single
-                // bright light without white-washing the underside.
+                // Big round core ball at each emitter. Scaled 1.5x
+                // proportionally with the astronaut's boot balls
+                // (which bumped to 1.35) so the two entities read
+                // as the same VFX family.
+                coreScale={2.85}
+                // Every jet gets its own pointLight — 4 of these
+                // cast a wheelbase-shaped light spill on the terrain,
+                // matching the astronaut-in-float's ground illumination.
+                // lightScale 0.55: brighter per-light than the earlier
+                // 0.3, still tuned so 4 combined ≈ 1 astronaut light
+                // without washing the underside white.
                 pointLight
-                lightScale={0.3}
+                lightScale={0.55}
               />
             </group>
           ))}
