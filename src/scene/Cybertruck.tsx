@@ -68,19 +68,15 @@ const CAM_LOOK_AHEAD = 1.2;
 const CAM_LOOK_UP = 1.4;
 const CAM_LERP = 6;
 
-// Jet layout — four HoverJets, one per corner-of-old-wheel-well.
-// Positions in the outer group's LOCAL frame, tucked well INSIDE the
-// truck's silhouette on X (chassis half-width is ~1.5 world units,
-// so ±0.5 sits deep under the belly) and pulled in on Z so the front
-// jets don't peek out ahead of the nose.
-const JET_HALF_TRACK = 0.5;
-const JET_AXLE_Z = 1.1;
-const JET_POSITIONS: [number, number][] = [
-  [-JET_HALF_TRACK, -JET_AXLE_Z],
-  [JET_HALF_TRACK, -JET_AXLE_Z],
-  [-JET_HALF_TRACK, JET_AXLE_Z],
-  [JET_HALF_TRACK, JET_AXLE_Z],
-];
+// Jet layout — one HoverJet at each of the four ORIGINAL wheel-node
+// positions from the GLB (Sphere.001..004). We snapshot the wheel
+// world positions during model prep, before hiding the wheel nodes,
+// then multiply by the chassis scale to get the corresponding
+// positions in chassisRef's local frame. Y is ignored (jets sit at
+// the chassis SILL via jetGroupRef.position.y = -groundOffset).
+// This guarantees the flames appear exactly where the tires used to
+// be, no manual X/Z tuning needed if we ever change proportions.
+
 // Base intensity while parked so the truck reads as HOVERING even
 // when idle (full-off jets would suggest "landed").
 const JET_IDLE_INTENSITY = 0.35;
@@ -118,6 +114,13 @@ export function Cybertruck() {
   const modelInfo = useMemo(() => {
     const scene = gltf.scene.clone(true);
     scene.rotation.y = Math.PI;
+    // Two-phase traversal:
+    //   pass 1: enable shadows + capture wheel-node positions BEFORE
+    //           we hide them, so we know exactly where the tires
+    //           originally sat.
+    //   pass 2: hide wheel + trim-cylinder nodes for the hover conversion.
+    scene.updateMatrixWorld(true);
+    const wheelWorldPositions: THREE.Vector3[] = [];
     scene.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) {
@@ -125,16 +128,35 @@ export function Cybertruck() {
         mesh.receiveShadow = true;
         return;
       }
+      // Wheel NODES (not the mesh primitives inside them) — Sphere.001..004
+      // are direct children of RootNode. Snapshot their world position
+      // after scene.rotation.y = Math.PI is applied, so we get the
+      // POST-FLIP positions that align with how the model actually
+      // renders in the scene.
+      if (o.name.startsWith("Sphere")) {
+        const wp = new THREE.Vector3();
+        o.getWorldPosition(wp);
+        wheelWorldPositions.push(wp);
+      }
+    });
+    // Second pass: hide the nodes we snapshotted so the truck reads
+    // as a wheel-less hover chassis.
+    scene.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) return;
       if (o.name.startsWith("Sphere") || o.name.startsWith("Cylinder")) {
         o.visible = false;
       }
     });
-    scene.updateMatrixWorld(true);
+
     const box = new THREE.Box3().setFromObject(scene);
     const size = box.getSize(new THREE.Vector3());
     const nativeLength = Math.max(size.x, size.z);
     if (!nativeLength || !Number.isFinite(nativeLength)) {
-      return { scene, scale: [1, 1, 1] as [number, number, number] };
+      return {
+        scene,
+        scale: [1, 1, 1] as [number, number, number],
+        jetPositions: [] as [number, number][],
+      };
     }
     const lengthScale = TARGET_LENGTH / nativeLength;
     const widthScale = lengthScale * WIDTH_MULT;
@@ -143,7 +165,16 @@ export function Cybertruck() {
     const scale: [number, number, number] = lengthIsX
       ? [lengthScale, yScale, widthScale]
       : [widthScale, yScale, lengthScale];
-    return { scene, scale };
+    // Convert wheel world positions (in the scene's own local frame,
+    // since scene has no parent at this point) into chassisRef's local
+    // frame by multiplying by the chassis scale. Y is dropped — jets
+    // sit at the chassis sill via jetGroupRef.position.y = -groundOffset,
+    // NOT at the wheel-center Y from the model.
+    const jetPositions: [number, number][] = wheelWorldPositions.map((wp) => [
+      wp.x * scale[0],
+      wp.z * scale[2],
+    ]);
+    return { scene, scale, jetPositions };
   }, [gltf.scene]);
 
   // Ground offset: measure how far the model's bounding box extends
@@ -343,9 +374,13 @@ export function Cybertruck() {
         </group>
         {/* Jet group: repositioned each frame to the chassis sill
             (Y = -groundOffset) so nozzles emit from under the belly,
-            not from the truck's origin (which is above sill). */}
+            not from the truck's origin (which is above sill).
+            Per-emitter X/Z come from the original wheel-node
+            positions in the GLB — snapshotted before the wheels
+            were hidden — so flames sit exactly where the tires
+            used to be. */}
         <group ref={jetGroupRef}>
-          {JET_POSITIONS.map(([x, z], i) => (
+          {modelInfo.jetPositions.map(([x, z], i) => (
             <group key={i} position={[x, 0, z]}>
               <HoverJet
                 intensityRef={jetIntensityRef}
