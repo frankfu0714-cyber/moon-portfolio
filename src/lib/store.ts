@@ -13,6 +13,8 @@ type State = {
   muted: boolean;
   activePanel: WaypointId | null;
   nearWaypoint: WaypointId | null;
+  nearVehicle: boolean; // astronaut is within enter-range of the Cybertruck
+  driving: boolean; // astronaut has boarded the Cybertruck
   walkInput: WalkInput;
   moving: boolean;
   autoRoam: boolean; // astronaut wanders the moonscape on his own
@@ -25,6 +27,9 @@ type Actions = {
   openPanel: (id: WaypointId) => void;
   closePanel: () => void;
   setNearWaypoint: (id: WaypointId | null) => void;
+  setNearVehicle: (near: boolean) => void;
+  enterVehicle: () => void;
+  exitVehicle: () => void;
   setWalkInput: (input: WalkInput) => void;
   setMoving: (moving: boolean) => void;
   toggleAutoRoam: () => void;
@@ -36,6 +41,8 @@ export const useSceneStore = create<State & Actions>((set) => ({
   muted: false,
   activePanel: null,
   nearWaypoint: null,
+  nearVehicle: false,
+  driving: false,
   walkInput: { forward: 0, strafe: 0, running: false, jumping: false },
   moving: false,
   autoRoam: false,
@@ -45,6 +52,9 @@ export const useSceneStore = create<State & Actions>((set) => ({
   openPanel: (id) => set({ activePanel: id }),
   closePanel: () => set({ activePanel: null }),
   setNearWaypoint: (id) => set({ nearWaypoint: id }),
+  setNearVehicle: (near) => set({ nearVehicle: near }),
+  enterVehicle: () => set({ driving: true, nearVehicle: false, autoRoam: false }),
+  exitVehicle: () => set({ driving: false }),
   setWalkInput: (walkInput) => set({ walkInput }),
   setMoving: (moving) => set({ moving }),
   toggleAutoRoam: () => set((s) => ({ autoRoam: !s.autoRoam })),
