@@ -4,9 +4,18 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useSceneStore } from "@/lib/store";
 import { WAYPOINTS } from "@/lib/waypoints";
+import { STRUCTURE_BY_ID, ROCKET_COLOR } from "@/lib/missions";
+import {
+  useMissionStore,
+  selectRocketUnlocked,
+  selectVisitedCount,
+  TOTAL_MISSIONS,
+} from "@/lib/missionStore";
 import { DPad } from "./DPad";
 import { InteractHint } from "./InteractHint";
 import { MuteButton } from "./MuteButton";
+import { MissionProgress } from "./MissionProgress";
+import { RocketRewardOverlay } from "./RocketRewardOverlay";
 
 // How long the control hints stay on screen before fading away. Minimal
 // cinematic HUD: after this, the frame is just the scene + a whisper of a
@@ -50,11 +59,85 @@ export function HUD() {
   const driving = useSceneStore((s) => s.driving);
   const enterVehicle = useSceneStore((s) => s.enterVehicle);
   const exitVehicle = useSceneStore((s) => s.exitVehicle);
+  const nearStructure = useSceneStore((s) => s.nearStructure);
+  const activeStructure = useSceneStore((s) => s.activeStructure);
+  const openStructure = useSceneStore((s) => s.openStructure);
+  const nearRocket = useSceneStore((s) => s.nearRocket);
+  const showingRocketReward = useSceneStore((s) => s.showingRocketReward);
+  const showRocketReward = useSceneStore((s) => s.showRocketReward);
+  const rocketUnlocked = useMissionStore((s) => selectRocketUnlocked(s));
+  const visitedCount = useMissionStore((s) => selectVisitedCount(s));
+  const markVisited = useMissionStore((s) => s.markVisited);
+  const markRocketRewardShown = useMissionStore(
+    (s) => s.markRocketRewardShown,
+  );
+
   const near = WAYPOINTS.find((w) => w.id === nearWaypoint);
-  // Vehicle interact wins over waypoint interact when both are in range.
-  const showVehicleHint = (nearVehicle || driving) && !activePanel;
-  const vehicleHintLabel = driving ? "exit Cybertruck" : "enter Cybertruck";
-  const vehicleHintZh = driving ? "下車" : "上車";
+  const structure = nearStructure ? STRUCTURE_BY_ID[nearStructure] : null;
+
+  // Any modal / video open silences the world-space hints.
+  const anyModalOpen =
+    !!activePanel || !!activeStructure || showingRocketReward;
+
+  // E priority (matches useKeyboardInput): rocket > vehicle >
+  // structure > waypoint. Reflected here for the interact hint.
+  let hint:
+    | { label: string; labelZh: string; color: string; verb: string; onTap: () => void }
+    | null = null;
+  if (!anyModalOpen) {
+    if (nearRocket) {
+      if (rocketUnlocked) {
+        hint = {
+          label: "launch",
+          labelZh: "發射",
+          color: ROCKET_COLOR,
+          verb: "",
+          onTap: () => {
+            showRocketReward();
+            markRocketRewardShown();
+          },
+        };
+      } else {
+        hint = {
+          label: `${visitedCount} / ${TOTAL_MISSIONS} missions`,
+          labelZh: "任務未完成",
+          color: "#8892a2",
+          verb: "🔒",
+          onTap: () => undefined,
+        };
+      }
+    } else if (nearVehicle || driving) {
+      hint = {
+        label: driving ? "exit Cybertruck" : "enter Cybertruck",
+        labelZh: driving ? "下車" : "上車",
+        color: "#9dd6ff",
+        verb: "",
+        onTap: () => (driving ? exitVehicle() : enterVehicle()),
+      };
+    } else if (structure) {
+      hint = {
+        label: structure.label,
+        labelZh: structure.labelZh,
+        color: structure.color,
+        verb: "Inspect",
+        onTap: () => {
+          openStructure(structure.id);
+          markVisited(structure.id);
+        },
+      };
+    } else if (near) {
+      hint = {
+        label: near.label,
+        labelZh: near.labelZh,
+        color: near.flagColor,
+        verb: "View",
+        onTap: () => {
+          openPanel(near.id);
+          markVisited(near.id);
+        },
+      };
+    }
+  }
 
   const [hintsVisible, setHintsVisible] = useState(true);
   useEffect(() => {
@@ -74,8 +157,9 @@ export function HUD() {
         </div>
       </div>
 
-      {/* Top-right controls: roam / float / sound */}
+      {/* Top-right controls: missions / roam / float / sound */}
       <div className="fixed top-4 right-4 z-30 flex gap-2 opacity-70 hover:opacity-100 transition-opacity">
+        <MissionProgress />
         <ModeButton label="ROAM" on={autoRoam} onClick={toggleAutoRoam} />
         <ModeButton label="FLOAT" on={floatMode} onClick={toggleFloatMode} />
         <MuteButton />
@@ -98,26 +182,19 @@ export function HUD() {
         </AnimatePresence>
       </div>
 
-      {/* Interact hint centered above head. Vehicle enter/exit takes
-          priority so E always means one thing in the moment. */}
-      {showVehicleHint ? (
-        <InteractHint
-          visible={true}
-          label={vehicleHintLabel}
-          labelZh={vehicleHintZh}
-          color="#9dd6ff"
-          verb=""
-          onTap={() => (driving ? exitVehicle() : enterVehicle())}
-        />
-      ) : (
-        <InteractHint
-          visible={!!near && !activePanel}
-          label={near?.label ?? ""}
-          labelZh={near?.labelZh ?? ""}
-          color={near?.flagColor ?? "#fff"}
-          onTap={() => near && openPanel(near.id)}
-        />
-      )}
+      {/* Interact hint centered above head. Single hint with priority:
+          rocket > vehicle > structure > waypoint. Computed above. */}
+      <InteractHint
+        visible={!!hint}
+        label={hint?.label ?? ""}
+        labelZh={hint?.labelZh ?? ""}
+        color={hint?.color ?? "#fff"}
+        verb={hint?.verb ?? ""}
+        onTap={hint?.onTap ?? (() => undefined)}
+      />
+
+      {/* Rocket reward video + completion toast */}
+      <RocketRewardOverlay />
 
       {/* Mobile d-pad */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 sm:hidden">

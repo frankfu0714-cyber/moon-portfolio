@@ -11,6 +11,13 @@ import { WAYPOINTS, type WaypointId } from "@/lib/waypoints";
 import { sampleMeshHeight, sampleSlope } from "@/lib/terrain";
 import { ROCKS, resolveRockCollision } from "@/lib/rocks";
 import { vehicleState, CYBERTRUCK_INTERACT_R, CYBERTRUCK_COLLISION_R } from "./Cybertruck";
+import {
+  STRUCTURES,
+  ROCKET_POSITION,
+  ROCKET_INTERACT_RADIUS,
+  type StructureId,
+} from "@/lib/missions";
+import { useMissionStore } from "@/lib/missionStore";
 
 const WALK_SPEED = 1.2; // units/sec — chill vibe
 const RUN_SPEED = 2.6; // units/sec — "run slowly" jog
@@ -313,13 +320,54 @@ export function AstronautController() {
     astronaut.visible = true;
 
     // Near-vehicle proximity: publish so the HUD can render the
-    // "E · enter Cybertruck" hint.
+    // "E · enter Cybertruck" hint. When the astronaut first gets
+    // in range, tick off the "visit the Cybertruck" mission —
+    // there's no separate intro panel for the truck.
     {
       const dx = astronaut.position.x - vehicleState.x;
       const dz = astronaut.position.z - vehicleState.z;
-      const near = dx * dx + dz * dz < CYBERTRUCK_INTERACT_R * CYBERTRUCK_INTERACT_R;
+      const near =
+        dx * dx + dz * dz < CYBERTRUCK_INTERACT_R * CYBERTRUCK_INTERACT_R;
       if (near !== useSceneStore.getState().nearVehicle) {
         setNearVehicle(near);
+      }
+      if (near) useMissionStore.getState().markVisited("cybertruck");
+    }
+
+    // Near-structure proximity: pick whichever mission structure the
+    // astronaut is closest to within its interact radius (nearest wins
+    // if two overlap). Publish to the store so the HUD can render the
+    // right hint. Cybertruck lives on nearVehicle above, not here.
+    {
+      let hit: StructureId | null = null;
+      let hitDistSq = Infinity;
+      for (const s of STRUCTURES) {
+        if (s.id === "cybertruck") continue;
+        const dx = astronaut.position.x - s.position[0];
+        const dz = astronaut.position.z - s.position[1];
+        const dSq = dx * dx + dz * dz;
+        if (
+          dSq < s.interactRadius * s.interactRadius &&
+          dSq < hitDistSq
+        ) {
+          hit = s.id;
+          hitDistSq = dSq;
+        }
+      }
+      if (hit !== useSceneStore.getState().nearStructure) {
+        useSceneStore.getState().setNearStructure(hit);
+      }
+    }
+
+    // Near-rocket proximity: independent from structures (rocket is
+    // gated by mission completion, not a mission itself).
+    {
+      const dx = astronaut.position.x - ROCKET_POSITION[0];
+      const dz = astronaut.position.z - ROCKET_POSITION[1];
+      const near =
+        dx * dx + dz * dz < ROCKET_INTERACT_RADIUS * ROCKET_INTERACT_RADIUS;
+      if (near !== useSceneStore.getState().nearRocket) {
+        useSceneStore.getState().setNearRocket(near);
       }
     }
 

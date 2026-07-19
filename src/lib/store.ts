@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { WaypointId } from "./waypoints";
+import type { StructureId } from "./missions";
 
 export type WalkInput = {
   forward: number; // -1..1
@@ -15,6 +16,12 @@ type State = {
   nearWaypoint: WaypointId | null;
   nearVehicle: boolean; // astronaut is within enter-range of the Cybertruck
   driving: boolean; // astronaut has boarded the Cybertruck
+  // Mission system: proximity + active panel for the interactable
+  // structures (Apollo LM, solar array, etc.) and the rocket.
+  nearStructure: StructureId | null;
+  activeStructure: StructureId | null;
+  nearRocket: boolean;
+  showingRocketReward: boolean;
   walkInput: WalkInput;
   moving: boolean;
   autoRoam: boolean; // astronaut wanders the moonscape on his own
@@ -30,6 +37,12 @@ type Actions = {
   setNearVehicle: (near: boolean) => void;
   enterVehicle: () => void;
   exitVehicle: () => void;
+  setNearStructure: (id: StructureId | null) => void;
+  openStructure: (id: StructureId) => void;
+  closeStructure: () => void;
+  setNearRocket: (near: boolean) => void;
+  showRocketReward: () => void;
+  hideRocketReward: () => void;
   setWalkInput: (input: WalkInput) => void;
   setMoving: (moving: boolean) => void;
   toggleAutoRoam: () => void;
@@ -43,6 +56,10 @@ export const useSceneStore = create<State & Actions>((set) => ({
   nearWaypoint: null,
   nearVehicle: false,
   driving: false,
+  nearStructure: null,
+  activeStructure: null,
+  nearRocket: false,
+  showingRocketReward: false,
   walkInput: { forward: 0, strafe: 0, running: false, jumping: false },
   moving: false,
   autoRoam: false,
@@ -55,6 +72,12 @@ export const useSceneStore = create<State & Actions>((set) => ({
   setNearVehicle: (near) => set({ nearVehicle: near }),
   enterVehicle: () => set({ driving: true, nearVehicle: false, autoRoam: false }),
   exitVehicle: () => set({ driving: false }),
+  setNearStructure: (id) => set({ nearStructure: id }),
+  openStructure: (id) => set({ activeStructure: id }),
+  closeStructure: () => set({ activeStructure: null }),
+  setNearRocket: (near) => set({ nearRocket: near }),
+  showRocketReward: () => set({ showingRocketReward: true }),
+  hideRocketReward: () => set({ showingRocketReward: false }),
   setWalkInput: (walkInput) => set({ walkInput }),
   setMoving: (moving) => set({ moving }),
   toggleAutoRoam: () => set((s) => ({ autoRoam: !s.autoRoam })),
