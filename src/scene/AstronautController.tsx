@@ -9,7 +9,6 @@ import { SafeAsset } from "./SafeAsset";
 import { useSceneStore } from "@/lib/store";
 import { WAYPOINTS, type WaypointId } from "@/lib/waypoints";
 import { sampleMeshHeight } from "@/lib/terrain";
-import { ROCKS, resolveRockCollision } from "@/lib/rocks";
 import { vehicleState, CYBERTRUCK_INTERACT_R, CYBERTRUCK_COLLISION_R } from "./Cybertruck";
 import {
   STRUCTURES,
@@ -133,8 +132,8 @@ export const SOLID_CIRCLES: SolidCircle[] = [
   },
 ];
 
-// Roam-mode obstacle avoidance: everything solid (structures + tall
-// rocks) as XZ circles. The roamer steers smoothly around these instead
+// Roam-mode obstacle avoidance: static solids (structures, fences, sails,
+// truck) as XZ circles. The roamer steers smoothly around these instead
 // of ramming them and waiting for the stuck timer.
 // The rocket launch pad is a solid platform: anywhere on the disc the
 // boots stand on its metal top instead of sinking to the regolith
@@ -169,14 +168,7 @@ function walkSurfaceHeight(x: number, z: number): number {
   return h;
 }
 
-const OBSTACLES: { x: number; z: number; r: number }[] = [
-  ...SOLID_CIRCLES,
-  ...ROCKS.filter((r) => r.scaleY >= 0.35).map((r) => ({
-    x: r.x,
-    z: r.z,
-    r: r.collisionRadius + 0.42,
-  })),
-];
+const OBSTACLES: { x: number; z: number; r: number }[] = [...SOLID_CIRCLES];
 const AVOID_LOOKAHEAD = 6; // obstacles closer than this start to matter
 const AVOID_STRENGTH = 1.7; // how hard the path bends around them
 
@@ -500,13 +492,10 @@ export function AstronautController() {
     astronaut.position.x += velocity.current.x * dt;
     astronaut.position.z += velocity.current.z * dt;
 
-    // Rocks are solid: circle-vs-circle push-out in the XZ plane. Because
-    // only the penetrating component is removed, walking at a rock on an
-    // angle slides you along its flank instead of stopping you dead.
-    resolveRockCollision(astronaut.position);
-
-    // The lander, moon-base modules and rocket pad are solid too — same
-    // circle push-out as the rocks.
+    // The lander, moon-base modules and rocket pad are solid — circle
+    // push-out in the XZ plane. Because only the penetrating component
+    // is removed, hitting one on an angle slides you along its flank
+    // instead of stopping you dead.
     for (const sc of SOLID_CIRCLES) {
       const ldx = astronaut.position.x - sc.x;
       const ldz = astronaut.position.z - sc.z;
@@ -758,8 +747,8 @@ function pickRoamTarget(from: THREE.Vector3): { x: number; z: number } {
 }
 
 // Blend a lateral push into `desired` for every obstacle sitting close
-// ahead of the travel line, so the roamer arcs around rocks and
-// buildings instead of grinding against their colliders.
+// ahead of the travel line, so the roamer arcs around buildings and
+// the truck instead of grinding against their colliders.
 function steerAroundObstacles(pos: THREE.Vector3, desired: THREE.Vector3) {
   const speed = Math.hypot(desired.x, desired.z);
   if (speed < 1e-4) return;

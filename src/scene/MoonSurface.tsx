@@ -9,7 +9,6 @@ import {
   TERRAIN_RADIUS,
   TERRAIN_SEGMENTS,
 } from "@/lib/terrain";
-import { RockField } from "./RockField";
 
 // Kept in lib/terrain.ts so the walk controller can sample the exact
 // same triangle mesh the GPU renders.
@@ -126,7 +125,6 @@ export function MoonSurface() {
       <SafeAsset label="moon-texture">
         <MoonTextureApplier materialRef={materialRef} />
       </SafeAsset>
-      <RockField />
     </>
   );
 }
