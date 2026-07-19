@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useSceneStore } from "./store";
+import { useMissionStore, selectRocketUnlocked } from "./missionStore";
 
 const KEY_FORWARD = new Set(["KeyW", "ArrowUp"]);
 const KEY_BACK = new Set(["KeyS", "ArrowDown"]);
@@ -35,33 +36,72 @@ export function useKeyboardInput() {
       if (e.repeat) return;
 
       if (KEY_CLOSE.has(e.code)) {
-        const { activePanel, closePanel } = store();
-        if (activePanel) {
+        const s = store();
+        if (s.showingRocketReward) {
           e.preventDefault();
-          closePanel();
+          s.hideRocketReward();
+          return;
+        }
+        if (s.activeStructure) {
+          e.preventDefault();
+          s.closeStructure();
+          return;
+        }
+        if (s.activePanel) {
+          e.preventDefault();
+          s.closePanel();
+          return;
         }
         return;
       }
 
       if (KEY_INTERACT.has(e.code)) {
-        const {
-          nearWaypoint,
-          activePanel,
-          openPanel,
-          closePanel,
-          nearVehicle,
-          driving,
-          enterVehicle,
-          exitVehicle,
-        } = store();
-        if (activePanel) {
-          closePanel();
-        } else if (driving) {
-          exitVehicle();
-        } else if (nearVehicle) {
-          enterVehicle();
-        } else if (nearWaypoint) {
-          openPanel(nearWaypoint);
+        const s = store();
+        // Close whichever panel / overlay is open first.
+        if (s.showingRocketReward) {
+          s.hideRocketReward();
+          return;
+        }
+        if (s.activeStructure) {
+          s.closeStructure();
+          return;
+        }
+        if (s.activePanel) {
+          s.closePanel();
+          return;
+        }
+        if (s.driving) {
+          s.exitVehicle();
+          return;
+        }
+        // Rocket launch has highest priority when it's unlocked —
+        // reaching the rocket at all is the point of the mission
+        // system, so a stray waypoint/structure nearby shouldn't
+        // steal the E key.
+        if (s.nearRocket) {
+          const unlocked = selectRocketUnlocked(useMissionStore.getState());
+          if (unlocked) {
+            s.showRocketReward();
+            useMissionStore.getState().markRocketRewardShown();
+          }
+          // If locked, do nothing — the HUD already tells the player
+          // how many missions are left.
+          return;
+        }
+        if (s.nearVehicle) {
+          s.enterVehicle();
+          useMissionStore.getState().markVisited("cybertruck");
+          return;
+        }
+        if (s.nearStructure) {
+          s.openStructure(s.nearStructure);
+          useMissionStore.getState().markVisited(s.nearStructure);
+          return;
+        }
+        if (s.nearWaypoint) {
+          s.openPanel(s.nearWaypoint);
+          useMissionStore.getState().markVisited(s.nearWaypoint);
+          return;
         }
         return;
       }
@@ -77,7 +117,10 @@ export function useKeyboardInput() {
       }
 
       // Ignore walk input while a panel is open
-      if (store().activePanel) return;
+      {
+        const s = store();
+        if (s.activePanel || s.activeStructure || s.showingRocketReward) return;
+      }
 
       let changed = false;
       if (KEY_FORWARD.has(e.code) && !pressed.current.has("forward")) {
