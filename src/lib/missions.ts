@@ -78,7 +78,9 @@ export const STRUCTURES: Structure[] = [
     id: "solar-farm",
     label: "Solar Sail Array",
     labelZh: "太陽能陣列",
-    position: [2.9, 17],
+    // Centroid of the shifted SAIL_POSITIONS (see MoonBase.tsx).
+    // Keep in sync if the farm ever moves again.
+    position: [-9.1, 22],
     interactRadius: 5,
     color: "#ff8a5b",
     intro:

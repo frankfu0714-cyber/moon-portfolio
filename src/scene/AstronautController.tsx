@@ -10,6 +10,7 @@ import { useSceneStore } from "@/lib/store";
 import { WAYPOINTS, type WaypointId } from "@/lib/waypoints";
 import { sampleMeshHeight } from "@/lib/terrain";
 import { vehicleState, CYBERTRUCK_INTERACT_R, CYBERTRUCK_COLLISION_R } from "./Cybertruck";
+import { SAIL_POSITIONS, SAIL_COLLISION_R } from "./MoonBase";
 import {
   STRUCTURES,
   ROCKET_POSITION,
@@ -110,16 +111,10 @@ export const SOLID_CIRCLES: SolidCircle[] = [
   { x: -15.65, z: -30, r: 2.35 },
   { x: -12, z: -30, r: 2.35 },
   { x: -8.35, z: -30, r: 2.35 },
-  // Vertical solar-sail farm west of the lander - one circle per mast,
-  // mirrors the SAIL_POSITIONS in MoonBase.tsx.
-  { x: 0.03, z: 13.34, r: 1.1 },
-  { x: 1.14, z: 16.13, r: 1.1 },
-  { x: 2.26, z: 18.91, r: 1.1 },
-  { x: 3.37, z: 21.7, r: 1.1 },
-  { x: 2.63, z: 12.3, r: 1.1 },
-  { x: 3.74, z: 15.09, r: 1.1 },
-  { x: 4.86, z: 17.87, r: 1.1 },
-  { x: 5.97, z: 20.66, r: 1.1 },
+  // Vertical solar-sail farm — one circle per mast, generated from
+  // the shared SAIL_POSITIONS constant in MoonBase.tsx so shifting a
+  // sail in one place can't leave a stale invisible collider behind.
+  ...SAIL_POSITIONS.map(([x, z]) => ({ x, z, r: SAIL_COLLISION_R })),
   // Cybertruck collision reads live vehicleState so the astronaut
   // avoids the truck wherever it currently sits (not just its parked
   // spawn location). Getter properties keep the existing consumer code

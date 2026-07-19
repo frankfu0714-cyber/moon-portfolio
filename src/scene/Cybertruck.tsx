@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import { sampleTerrainHeight, sampleSlope } from "@/lib/terrain";
+import { sampleMeshHeight, sampleSlope } from "@/lib/terrain";
 import { useSceneStore } from "@/lib/store";
 import { HoverJet } from "./HoverJet";
 
@@ -74,11 +74,17 @@ const WIDTH_MULT = 0.75;
 
 // Hover tuning
 // Chassis bottom rides this many world units above the sampled terrain.
-// 1.1 lands the sill around astronaut-waist height (astronaut is 1.75
-// tall, so 1.1 / 1.75 ≈ 63%) — reads as clearly hovering, plenty of
-// air below the chassis for the long flame trails to fill. Below 0.7
-// felt "resting"; 1.1 is the new clearly-floating baseline.
-const HOVER_HEIGHT = 1.1;
+// 1.4 lands the sill around astronaut-chest height and leaves headroom
+// for the long flame trails plus a safety margin so fast driving over
+// sharp terrain features can't clip the visible mesh into the body.
+const HOVER_HEIGHT = 1.4;
+// Emitter positions come from the GLB's original wheel nodes (see
+// modelInfo.jetPositions). Real wheels sit at the outer edges of the
+// body — fine for wheels, but the hover thrusters read as too wide
+// when they project past the chassis silhouette. Pull each emitter's
+// X coordinate inward by this factor (Z unchanged so the wheelbase
+// front/back spacing stays intact).
+const EMITTER_INWARD_MULT = 0.75;
 // Bob amp 0.15 -> 0.06 per Frank's ask — the up/down range was too
 // big and made the parked truck read as bobbing on rough water
 // instead of just breathing in place. Period unchanged so the rhythm
@@ -211,7 +217,7 @@ export function Cybertruck() {
     // sit at the chassis sill via jetGroupRef.position.y = -groundOffset,
     // NOT at the wheel-center Y from the model.
     const jetPositions: [number, number][] = wheelWorldPositions.map((wp) => [
-      wp.x * scale[0],
+      wp.x * scale[0] * EMITTER_INWARD_MULT,
       wp.z * scale[2],
     ]);
     return { scene, scale, jetPositions };
@@ -344,9 +350,16 @@ export function Cybertruck() {
       pos.current.z = nextZ;
     }
 
-    // Hover: chassis bottom sits HOVER_HEIGHT above sampled terrain,
-    // with a subtle sin bob so the truck reads as "not stationary".
-    const groundY = sampleTerrainHeight(pos.current.x, pos.current.z);
+    // Hover: chassis bottom sits HOVER_HEIGHT above the RENDERED
+    // terrain surface, with a subtle sin bob so the truck reads as
+    // "not stationary". Use sampleMeshHeight (exact triangle-interp
+    // of the displaced plane) not sampleTerrainHeight (analytic
+    // heightfield) — between mesh vertices the GPU-interpolated
+    // surface can sit above the analytic one, which was letting the
+    // truck sink into visible depressions even though the analytic
+    // math said it was floating. Sampled every frame at current
+    // pos.x/z after collision resolution — no caching, no lag.
+    const groundY = sampleMeshHeight(pos.current.x, pos.current.z);
     const time = state.clock.elapsedTime;
     const bob = Math.sin((time / BOB_PERIOD) * Math.PI * 2) * BOB_AMP;
     pos.current.y = groundY + HOVER_HEIGHT + groundOffset.current + bob;
