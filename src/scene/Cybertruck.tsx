@@ -33,19 +33,25 @@ export const CYBERTRUCK_Z = 11;
 export const CYBERTRUCK_ROT_Y = 0.55; // ~31 degrees off axis
 export const CYBERTRUCK_COLLISION_R = 4.5;
 
-// Target world length for the truck. We compute the model's native
-// bounding-box length on load and scale to hit this target.
+// Target world length + height for the truck. Real Cybertruck is ~5.68m
+// long by ~1.90m tall — a ~3:1 length:height ratio. This GLB's native
+// silhouette is proportionally taller than that, so we scale X + Z off
+// LENGTH but derive Y off HEIGHT to squash the wedge back to the
+// reference stance. TARGET_HEIGHT = TARGET_LENGTH / 3.0.
 const TARGET_LENGTH = 6.7;
+const TARGET_LENGTH_TO_HEIGHT = 3.0;
+const TARGET_HEIGHT = TARGET_LENGTH / TARGET_LENGTH_TO_HEIGHT;
 
 export function Cybertruck() {
   const gltf = useGLTF(CYBERTRUCK_URL);
   const groupRef = useRef<THREE.Group>(null);
 
-  // Enable shadows + compute a fit-to-target scale from the model's
-  // native bounding box (this GLB comes out of FBX2glTF with unusual
-  // per-node scales, so we can't hard-code a scalar reliably).
-  const scale = useMemo(() => {
-    let target: THREE.Vector3 | null = null;
+  // Enable shadows + compute a non-uniform fit-to-target scale from the
+  // model's native bounding box (this GLB comes out of FBX2glTF with
+  // unusual per-node scales, so we can't hard-code a scalar reliably).
+  // Y is squashed independently so length:height matches the reference
+  // 3:1 wedge even if the source model is stubbier.
+  const scale = useMemo<[number, number, number]>(() => {
     gltf.scene.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) {
@@ -55,11 +61,11 @@ export function Cybertruck() {
     });
     const box = new THREE.Box3().setFromObject(gltf.scene);
     const size = box.getSize(new THREE.Vector3());
-    target = size;
     const nativeLength = Math.max(size.x, size.z);
-    if (!nativeLength || !Number.isFinite(nativeLength)) return 1;
-    void target;
-    return TARGET_LENGTH / nativeLength;
+    if (!nativeLength || !Number.isFinite(nativeLength)) return [1, 1, 1];
+    const xz = TARGET_LENGTH / nativeLength;
+    const y = size.y > 1e-4 ? TARGET_HEIGHT / size.y : xz;
+    return [xz, y, xz];
   }, [gltf.scene]);
 
   // Terrain-follow: sample the ground under the truck center. The
