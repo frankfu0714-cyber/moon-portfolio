@@ -104,8 +104,8 @@ export function HUD() {
         <AnimatePresence>{!activePanel && <DPad />}</AnimatePresence>
       </div>
 
-      {/* Asset credit — bottom right, near-invisible until hovered */}
-      <div className="fixed bottom-3 right-3 z-30 no-select">
+      {/* Asset credits — bottom right, near-invisible until hovered */}
+      <div className="fixed bottom-3 right-3 z-30 no-select flex flex-col items-end gap-1">
         <a
           href="https://sketchfab.com/3d-models/astronaut-d5a16f7ec11c4b1d876059cbf6adbf56"
           target="_blank"
@@ -114,6 +114,15 @@ export function HUD() {
           className="block text-[9px] tracking-[0.15em] uppercase opacity-25 hover:opacity-70 transition-opacity"
         >
           astronaut · Sketchfab · CC-BY 4.0
+        </a>
+        <a
+          href="https://poly.pizza/m/Jpar3f32mt"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Cybertruck model by Mobolaji, via Poly Pizza (CC-BY 3.0)"
+          className="block text-[9px] tracking-[0.15em] uppercase opacity-25 hover:opacity-70 transition-opacity"
+        >
+          cybertruck · Mobolaji · Poly Pizza · CC-BY 3.0
         </a>
       </div>
     </>
