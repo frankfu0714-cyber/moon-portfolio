@@ -74,12 +74,11 @@ const WIDTH_MULT = 0.75;
 
 // Hover tuning
 // Chassis bottom rides this many world units above the sampled terrain.
-// 0.7 lands the sill just above astronaut-knee height (astronaut is
-// 1.75 tall, so 0.7 / 1.75 = 40%) — clearly floating, with enough
-// vertical space for the flame plumes to fall onto the ground
-// beneath. 0.5 read as "resting on the ground"; anything above ~0.85
-// pushes the sill into chest/hip territory again.
-const HOVER_HEIGHT = 0.7;
+// 1.1 lands the sill around astronaut-waist height (astronaut is 1.75
+// tall, so 1.1 / 1.75 ≈ 63%) — reads as clearly hovering, plenty of
+// air below the chassis for the long flame trails to fill. Below 0.7
+// felt "resting"; 1.1 is the new clearly-floating baseline.
+const HOVER_HEIGHT = 1.1;
 // Bob amp 0.15 -> 0.06 per Frank's ask — the up/down range was too
 // big and made the parked truck read as bobbing on rough water
 // instead of just breathing in place. Period unchanged so the rhythm
@@ -88,10 +87,11 @@ const BOB_AMP = 0.06;
 const BOB_PERIOD = 1.5;
 // Vertical stretch applied to the HoverJet flame stack — cones and
 // particles both elongate downward so the jets read as real thrusters
-// spraying, not short blobs. Terrain occludes anything past ground
-// plane, so the visible portion above ground stays bright while the
-// tail cleanly fades into the regolith.
-const JET_STRETCH_Y = 2.6;
+// spraying, not short blobs. Bumped to 4.5 to match the higher
+// HOVER_HEIGHT so the plumes still reach toward the ground plane
+// with visible tail instead of ending in mid-air. Terrain occludes
+// anything past the ground so the visible portion stays bright.
+const JET_STRETCH_Y = 4.5;
 
 // Drive tuning — floatier than the ground version.
 const BASE_SPEED = 5.0;
@@ -132,15 +132,6 @@ export function Cybertruck() {
   const groupRef = useRef<THREE.Group>(null);
   const chassisRef = useRef<THREE.Group>(null);
   const jetGroupRef = useRef<THREE.Group>(null);
-  // Decals live in their own group OUTSIDE the tilted chassis — they
-  // must lie flat on the terrain no matter how the chassis pitches
-  // with the slope. Parented to the outer group (position + yaw only),
-  // never rotated on X/Z.
-  const decalGroupRef = useRef<THREE.Group>(null);
-  // One ground-decal mesh per jet emitter — bright cyan disc pooled
-  // on the terrain directly beneath its flame. Populated by the
-  // per-jet <mesh ref={...}> callback below.
-  const groundDecalsRef = useRef<(THREE.Mesh | null)[]>([]);
   const { camera } = useThree();
 
   // Live truck state
@@ -432,25 +423,6 @@ export function Cybertruck() {
       speedFrac,
     );
 
-    // Ground decals: 4 flat cyan circles on the terrain, one directly
-    // below each jet emitter. Sample terrain PER decal so on sloped
-    // ground each circle hugs its own local surface height. Decals
-    // now live under decalGroupRef (a sibling of the tilted chassis)
-    // so they stay flat on world horizontal no matter how the truck
-    // pitches. World Y for each decal = terrain + 0.02, and the
-    // decal group is parented at pos.current, so local Y is offset.
-    for (let i = 0; i < modelInfo.jetPositions.length; i++) {
-      const decal = groundDecalsRef.current[i];
-      if (!decal) continue;
-      const [jx, jz] = modelInfo.jetPositions[i];
-      const worldX = pos.current.x + jx * cosHd + jz * sinHd;
-      const worldZ = pos.current.z - jx * sinHd + jz * cosHd;
-      const terrainY = sampleTerrainHeight(worldX, worldZ);
-      decal.position.y = terrainY + 0.02 - pos.current.y;
-      const mat = decal.material as THREE.MeshBasicMaterial;
-      mat.opacity = jetIntensityRef.current * 0.85;
-    }
-
     if (driving) {
       const cosH = Math.cos(heading.current);
       const sinH = Math.sin(heading.current);
@@ -547,35 +519,6 @@ export function Cybertruck() {
             </group>
           ))}
         </group>
-      </group>
-      {/* Ground-decal group: sibling of chassis, parented at the
-          outer group's origin (position + yaw only, no tilt). Each
-          decal lies flat on world horizontal, its Y set per frame
-          from the sampled terrain height under its jet's world
-          position. Kept out of the tilted chassis so a truck cresting
-          a slope doesn't rotate the "shadow" pools off the ground. */}
-      <group ref={decalGroupRef}>
-        {modelInfo.jetPositions.map(([x, z], i) => (
-          <mesh
-            key={i}
-            ref={(m) => {
-              groundDecalsRef.current[i] = m;
-            }}
-            position={[x, 0, z]}
-            rotation={[-Math.PI / 2, 0, 0]}
-          >
-            <circleGeometry args={[0.95, 32]} />
-            <meshBasicMaterial
-              color="#7ec8ff"
-              transparent
-              opacity={0}
-              depthWrite={false}
-              toneMapped={false}
-              blending={THREE.AdditiveBlending}
-              fog={false}
-            />
-          </mesh>
-        ))}
       </group>
     </group>
   );
