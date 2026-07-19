@@ -4,9 +4,33 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import { sampleTerrainHeight } from "@/lib/terrain";
+import { sampleTerrainHeight, sampleSlope } from "@/lib/terrain";
 import { useSceneStore } from "@/lib/store";
 import { HoverJet } from "./HoverJet";
+
+// Slope-align tuning
+// How much of the world-normal alignment we blend in. 1 = truck lies
+// fully flat on the slope (car-on-hillside look). 0 = never tilts,
+// stays perfectly horizontal (old level-lock). 0.5 = hover-craft
+// halfway suggestion: nose picks up the slope but doesn't commit to
+// riding it. Frank picked this range 30-70; 0.5 reads best in preview.
+const TESLA_SLOPE_BLEND = 0.5;
+// Per-frame slerp factor toward the target chassis quaternion.
+// 0.18 gives a soft ~0.5s ease when the truck crests a ridge without
+// feeling laggy on flat ground.
+const TESLA_TILT_SLERP = 0.18;
+// Half-width of the finite-difference stencil sampleSlope uses. Larger
+// values low-pass the slope so per-triangle terrain jitter doesn't
+// snap the truck; 0.6 spans about two triangles at TERRAIN_SEGMENTS=380.
+const SLOPE_SAMPLE_H = 0.6;
+
+// Module-level scratch objects — quaternion math is called every
+// frame and allocating in useFrame would churn the GC.
+const _worldUp = new THREE.Vector3(0, 1, 0);
+const _normalLocal = new THREE.Vector3();
+const _tiltQuat = new THREE.Quaternion();
+const _blendedTilt = new THREE.Quaternion();
+const _identityQuat = new THREE.Quaternion();
 
 // Tesla-Cybertruck-style low-poly GLB by Mobolaji, sourced from
 // Poly Pizza (CC-BY 3.0). Bundled at /public/models/cybertruck.glb.
@@ -108,6 +132,11 @@ export function Cybertruck() {
   const groupRef = useRef<THREE.Group>(null);
   const chassisRef = useRef<THREE.Group>(null);
   const jetGroupRef = useRef<THREE.Group>(null);
+  // Decals live in their own group OUTSIDE the tilted chassis — they
+  // must lie flat on the terrain no matter how the chassis pitches
+  // with the slope. Parented to the outer group (position + yaw only),
+  // never rotated on X/Z.
+  const decalGroupRef = useRef<THREE.Group>(null);
   // One ground-decal mesh per jet emitter — bright cyan disc pooled
   // on the terrain directly beneath its flame. Populated by the
   // per-jet <mesh ref={...}> callback below.
@@ -331,12 +360,12 @@ export function Cybertruck() {
     const bob = Math.sin((time / BOB_PERIOD) * Math.PI * 2) * BOB_AMP;
     pos.current.y = groundY + HOVER_HEIGHT + groundOffset.current + bob;
 
-    // Write transform on the outer group. Frank wants the truck LOCKED
-    // level — hover vehicle, no accel-pitch, no terrain-follow roll.
-    // Explicitly zero X and Z rotation every frame so nothing sneaks in.
+    // Outer group carries position + yaw ONLY. The chassis child gets
+    // the slope-aligned tilt (below). Decal group sits alongside the
+    // chassis under the outer group so decals inherit position + yaw
+    // but never the tilt — they must lie flat on the terrain.
     g.position.copy(pos.current);
     g.rotation.set(0, heading.current, 0);
-    c.rotation.set(0, 0, 0);
 
     vehicleState.x = pos.current.x;
     vehicleState.z = pos.current.z;
@@ -348,6 +377,52 @@ export function Cybertruck() {
       jetGroupRef.current.position.y = -groundOffset.current;
     }
 
+    // Sample slope at each of the 4 wheel contact points in world
+    // space, average the resulting surface normals. Single-center
+    // sampling snaps hard whenever the truck straddles a crater rim;
+    // the 4-point average low-passes that.
+    const cosHd = Math.cos(heading.current);
+    const sinHd = Math.sin(heading.current);
+    let nX = 0;
+    let nY = 0;
+    let nZ = 0;
+    for (const [jx, jz] of modelInfo.jetPositions) {
+      const worldX = pos.current.x + jx * cosHd + jz * sinHd;
+      const worldZ = pos.current.z - jx * sinHd + jz * cosHd;
+      const { dx, dz } = sampleSlope(worldX, worldZ, SLOPE_SAMPLE_H);
+      // For a heightfield y = h(x, z), the surface normal is
+      // normalize(-dh/dx, 1, -dh/dz). Sum without normalizing —
+      // renormalize once after the loop for the true average.
+      nX += -dx;
+      nY += 1;
+      nZ += -dz;
+    }
+    const nLen = Math.hypot(nX, nY, nZ);
+    if (nLen > 1e-6) {
+      nX /= nLen;
+      nY /= nLen;
+      nZ /= nLen;
+    } else {
+      nX = 0;
+      nY = 1;
+      nZ = 0;
+    }
+
+    // Transform the world normal into chassis-local frame by
+    // inverting the outer group's yaw. Inverse of rotate-around-Y-by-θ
+    // maps (x, y, z) -> (x*cos - z*sin, y, x*sin + z*cos).
+    _normalLocal.set(nX * cosHd - nZ * sinHd, nY, nX * sinHd + nZ * cosHd);
+    // Shortest-rotation quat from local up (0,1,0) to normalLocal.
+    _tiltQuat.setFromUnitVectors(_worldUp, _normalLocal);
+    // Blend with identity: at 1.0 the hover truck lies flat on the
+    // hillside (looks like a car); at 0 it stays perfectly level. 0.5
+    // suggests the slope without committing to it — right for a
+    // hover craft.
+    _blendedTilt.copy(_identityQuat).slerp(_tiltQuat, TESLA_SLOPE_BLEND);
+    // Slerp chassis toward the target so the tilt eases in over
+    // ~0.5s instead of snapping when the wheels cross a ridge.
+    c.quaternion.slerp(_blendedTilt, TESLA_TILT_SLERP);
+
     // Drive the shared jet intensity ref — every HoverJet reads it.
     // Idle baseline so parked jets still glow, ramping with speed.
     const speedFrac = Math.min(Math.abs(speed.current) / BOOST_SPEED, 1);
@@ -357,26 +432,21 @@ export function Cybertruck() {
       speedFrac,
     );
 
-    // Ground decals: 4 flat circles on the terrain, one directly
-    // below each jet emitter. Sample terrain PER decal (not just the
-    // truck center) so on sloped ground each circle hugs its own
-    // local surface height instead of floating. Opacity tracks jet
-    // intensity so the pool pulses with the thrusters.
-    const cosHd = Math.cos(heading.current);
-    const sinHd = Math.sin(heading.current);
-    const wrapperWorldY = pos.current.y - groundOffset.current;
+    // Ground decals: 4 flat cyan circles on the terrain, one directly
+    // below each jet emitter. Sample terrain PER decal so on sloped
+    // ground each circle hugs its own local surface height. Decals
+    // now live under decalGroupRef (a sibling of the tilted chassis)
+    // so they stay flat on world horizontal no matter how the truck
+    // pitches. World Y for each decal = terrain + 0.02, and the
+    // decal group is parented at pos.current, so local Y is offset.
     for (let i = 0; i < modelInfo.jetPositions.length; i++) {
       const decal = groundDecalsRef.current[i];
       if (!decal) continue;
       const [jx, jz] = modelInfo.jetPositions[i];
-      // Convert jet's local (jx, jz) to world through the outer
-      // group's heading rotation.
       const worldX = pos.current.x + jx * cosHd + jz * sinHd;
       const worldZ = pos.current.z - jx * sinHd + jz * cosHd;
       const terrainY = sampleTerrainHeight(worldX, worldZ);
-      // Decal is a child of the jet wrapper whose world Y equals
-      // wrapperWorldY. Local Y needed to land world Y = terrain + 0.02.
-      decal.position.y = terrainY + 0.02 - wrapperWorldY;
+      decal.position.y = terrainY + 0.02 - pos.current.y;
       const mat = decal.material as THREE.MeshBasicMaterial;
       mat.opacity = jetIntensityRef.current * 0.85;
     }
@@ -416,15 +486,13 @@ export function Cybertruck() {
       camInit.current = false;
     }
 
-    // Belt + suspenders: unconditionally re-clamp X/Z rotation on
-    // every group we own AT THE VERY END of useFrame — after physics,
-    // after collision, after camera, after any other write path — so
-    // no future code can accidentally leave a tilt in the transform.
-    // Frank kept seeing the truck pitched/rolled after fence collisions
-    // even with the earlier clamp higher in the frame; this final pass
-    // makes the guarantee absolute. Temporary warn logs any non-zero
-    // X/Z we catch here so a regression tells us WHICH group and WHICH
-    // frame; remove once we've confirmed the clamp holds in the wild.
+    // OUTER group must stay yaw-only — the tilt lives on the chassis
+    // now. Force X/Z to 0 in case any code path (collision, camera
+    // math) ever touches them. Chassis is intentionally NOT clamped
+    // here — its X/Z carry the slope tilt. The temporary warn fires
+    // only if something upstream ever tries to push a non-yaw
+    // rotation onto the outer group; remove once we're confident it
+    // never fires in the wild.
     const TILT_EPS = 1e-4;
     if (
       Math.abs(g.rotation.x) > TILT_EPS ||
@@ -435,36 +503,18 @@ export function Cybertruck() {
         z: g.rotation.z,
       });
     }
-    if (
-      Math.abs(c.rotation.x) > TILT_EPS ||
-      Math.abs(c.rotation.z) > TILT_EPS
-    ) {
-      console.warn("[Cybertruck] chassis non-zero rotation clamped", {
-        x: c.rotation.x,
-        z: c.rotation.z,
-      });
-    }
     g.rotation.x = 0;
     g.rotation.z = 0;
-    c.rotation.x = 0;
-    c.rotation.z = 0;
-    // Also clamp the loaded GLB's own scene node. It gets a static
-    // rotation.y = PI in useMemo; any external mutation of its X/Z
-    // would tilt the entire visible body inside the chassis group.
-    modelInfo.scene.rotation.x = 0;
-    modelInfo.scene.rotation.z = 0;
-    if (jetGroupRef.current) {
-      jetGroupRef.current.rotation.x = 0;
-      jetGroupRef.current.rotation.z = 0;
-    }
   });
 
   return (
     <group ref={groupRef}>
-      {/* Chassis group is separate from the outer transform so we can
-          hang the jet group off it (jets follow the chassis, not the
-          camera-side outer group). No tilt applied — Frank wants the
-          truck locked flat. */}
+      {/* Chassis child of the outer transform — this is what tilts to
+          match the terrain slope (50% blend). The chassis carries the
+          scaled truck body AND the jet group so flames follow the
+          tilted body naturally. Decals live OUTSIDE this tilted
+          subtree so they stay flat on the terrain regardless of
+          chassis pitch. */}
       <group ref={chassisRef}>
         <group scale={modelInfo.scale}>
           <primitive object={modelInfo.scene} />
@@ -494,31 +544,38 @@ export function Cybertruck() {
                 pointLight
                 lightScale={0.3}
               />
-              {/* Bright ground-circle "spill" directly below the
-                  emitter. Additive blue disc on the terrain — Bloom
-                  picks it up so the pool looks emissive. Y updated
-                  per frame from sampleTerrainHeight so the disc
-                  hugs the ground even on slopes. */}
-              <mesh
-                ref={(m) => {
-                  groundDecalsRef.current[i] = m;
-                }}
-                rotation={[-Math.PI / 2, 0, 0]}
-              >
-                <circleGeometry args={[0.95, 32]} />
-                <meshBasicMaterial
-                  color="#7ec8ff"
-                  transparent
-                  opacity={0}
-                  depthWrite={false}
-                  toneMapped={false}
-                  blending={THREE.AdditiveBlending}
-                  fog={false}
-                />
-              </mesh>
             </group>
           ))}
         </group>
+      </group>
+      {/* Ground-decal group: sibling of chassis, parented at the
+          outer group's origin (position + yaw only, no tilt). Each
+          decal lies flat on world horizontal, its Y set per frame
+          from the sampled terrain height under its jet's world
+          position. Kept out of the tilted chassis so a truck cresting
+          a slope doesn't rotate the "shadow" pools off the ground. */}
+      <group ref={decalGroupRef}>
+        {modelInfo.jetPositions.map(([x, z], i) => (
+          <mesh
+            key={i}
+            ref={(m) => {
+              groundDecalsRef.current[i] = m;
+            }}
+            position={[x, 0, z]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <circleGeometry args={[0.95, 32]} />
+            <meshBasicMaterial
+              color="#7ec8ff"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              toneMapped={false}
+              blending={THREE.AdditiveBlending}
+              fog={false}
+            />
+          </mesh>
+        ))}
       </group>
     </group>
   );
