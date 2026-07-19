@@ -106,6 +106,7 @@ export function Cybertruck() {
   const groupRef = useRef<THREE.Group>(null);
   const chassisRef = useRef<THREE.Group>(null);
   const jetGroupRef = useRef<THREE.Group>(null);
+  const groundDecalsRef = useRef<(THREE.Mesh | null)[]>([]);
   const { camera } = useThree();
 
   // Live truck state
@@ -351,6 +352,30 @@ export function Cybertruck() {
       speedFrac,
     );
 
+    // Ground decals: 4 flat circles on the terrain, one directly
+    // below each jet emitter. Sample terrain PER decal (not just the
+    // truck center) so on sloped ground each circle hugs its own
+    // local surface height instead of floating. Fade opacity with
+    // jet intensity so they pulse with the thrusters.
+    const cosHd = Math.cos(heading.current);
+    const sinHd = Math.sin(heading.current);
+    const wrapperWorldY = pos.current.y - groundOffset.current;
+    for (let i = 0; i < modelInfo.jetPositions.length; i++) {
+      const decal = groundDecalsRef.current[i];
+      if (!decal) continue;
+      const [jx, jz] = modelInfo.jetPositions[i];
+      // Convert jet's local (jx, jz) to world through the outer
+      // group's heading rotation.
+      const worldX = pos.current.x + jx * cosHd + jz * sinHd;
+      const worldZ = pos.current.z - jx * sinHd + jz * cosHd;
+      const terrainY = sampleTerrainHeight(worldX, worldZ);
+      // Decal is a child of the jet wrapper whose world Y equals
+      // wrapperWorldY. Local Y needed to land world Y = terrain + 0.02.
+      decal.position.y = terrainY + 0.02 - wrapperWorldY;
+      const mat = decal.material as THREE.MeshBasicMaterial;
+      mat.opacity = jetIntensityRef.current * 0.65;
+    }
+
     if (driving) {
       const cosH = Math.cos(heading.current);
       const sinH = Math.sin(heading.current);
@@ -439,6 +464,30 @@ export function Cybertruck() {
                 pointLight
                 lightScale={0.4}
               />
+              {/* Bright ground-circle decal directly below each
+                  emitter. Sits flat on the terrain (rotation.x =
+                  -PI/2) with Y updated per frame from
+                  sampleTerrainHeight so the disc hugs the ground
+                  even on slopes. Emissive-flavour blue via additive
+                  blending + toneMapped:false so Bloom picks up the
+                  core into a bright pool. */}
+              <mesh
+                ref={(m) => {
+                  groundDecalsRef.current[i] = m;
+                }}
+                rotation={[-Math.PI / 2, 0, 0]}
+              >
+                <circleGeometry args={[0.85, 24]} />
+                <meshBasicMaterial
+                  color="#7ec8ff"
+                  transparent
+                  opacity={0}
+                  depthWrite={false}
+                  toneMapped={false}
+                  blending={THREE.AdditiveBlending}
+                  fog={false}
+                />
+              </mesh>
             </group>
           ))}
         </group>
