@@ -8,10 +8,11 @@ import * as THREE from "three";
 // astronaut's FLOAT mode and the hover Cybertruck's under-chassis jets.
 //
 // Structure per instance (identical to Astronaut.tsx's inline version):
-//   - Outer cone   ConeGeometry(0.075, 0.52), soft blue #bfe4ff
-//   - Inner cone   ConeGeometry(0.038, 0.30), white core
-//   - Glow sprite  0.88x0.88 blue-white radial gradient at emitter face
-//   - 7 particles  small sprites drifting down + fading over ~0.8s
+//   - Outer cone   ConeGeometry(0.075, 0.52), soft blue #bfe4ff   ] inside
+//   - Inner cone   ConeGeometry(0.038, 0.30), white core          ] stretchY
+//   - 7 particles  small sprites drifting down + fading over ~0.8s ] wrapper
+//   - Glow sprite  0.88x0.88 blue-white radial gradient — OUTSIDE
+//     the stretchY wrapper so tall thrusters keep a round core ball
 //   - Optional pointLight (default off) so a cluster of jets can share
 //     one light instead of stacking many
 //
@@ -32,11 +33,18 @@ type Props = {
   // uses 4) so the summed intensity doesn't white-out the underside.
   pointLight?: boolean;
   lightScale?: number;
-  // Non-uniform vertical stretch for the flame stack — cones, glow
-  // sprite, AND particle trails elongate together so the whole jet
-  // reads as a longer thruster streak. Default 1 (astronaut boot
-  // aesthetic); the hover Cybertruck uses ~2.5 for a real thruster feel.
+  // Non-uniform vertical stretch for the flame stack — cones and
+  // particle trails elongate together so the jet reads as a longer
+  // thruster streak. Default 1 (astronaut boot aesthetic); the hover
+  // Cybertruck uses ~2.5 for a real thruster feel. NOTE: the nozzle
+  // glow sprite is intentionally OUTSIDE this wrapper so a tall flame
+  // still has a round core ball, not a vertically-squashed ellipse.
   stretchY?: number;
+  // Diameter multiplier for the nozzle "core ball" — the bright
+  // additive glow sprite at the emitter face. Default 1 matches the
+  // astronaut boot. Cybertruck asks for something larger so Bloom
+  // picks it up as a real ball of light at each wheel-well.
+  coreScale?: number;
 };
 
 // Soft round blue-white glow — matches Astronaut.tsx.
@@ -67,7 +75,7 @@ function getGlowTex() {
 }
 
 export const HoverJet = forwardRef<HoverJetHandle, Props>(function HoverJet(
-  { intensityRef, pointLight = false, lightScale = 1, stretchY = 1 },
+  { intensityRef, pointLight = false, lightScale = 1, stretchY = 1, coreScale = 1 },
   ref,
 ) {
   const groupRef = useRef<THREE.Group>(null);
@@ -202,17 +210,6 @@ export const HoverJet = forwardRef<HoverJetHandle, Props>(function HoverJet(
             blending={THREE.AdditiveBlending}
           />
         </mesh>
-        {/* Nozzle glow */}
-        <sprite position={[0, -0.01, 0]} scale={[0.88, 0.88, 1]}>
-          <spriteMaterial
-            ref={registerSpriteMat}
-            map={glowTex}
-            transparent
-            depthWrite={false}
-            toneMapped={false}
-            blending={THREE.AdditiveBlending}
-          />
-        </sprite>
         {/* Trailing exhaust particles */}
         {Array.from({ length: 7 }, (_, pi) => (
           <sprite
@@ -233,6 +230,21 @@ export const HoverJet = forwardRef<HoverJetHandle, Props>(function HoverJet(
           </sprite>
         ))}
       </group>
+      {/* Nozzle core-ball glow: sits OUTSIDE the stretchY wrapper so
+          a tall Cybertruck flame still has a round core, not an
+          ellipse. Sprites always face the camera, so the visual is a
+          bright additive disc — with Bloom on it reads as a real ball
+          of light at each emitter. */}
+      <sprite position={[0, -0.01, 0]} scale={[0.88 * coreScale, 0.88 * coreScale, 1]}>
+        <spriteMaterial
+          ref={registerSpriteMat}
+          map={glowTex}
+          transparent
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </sprite>
       {pointLight && (
         <pointLight
           ref={lightRef}
