@@ -39,7 +39,7 @@ export const CYBERTRUCK_COLLISION_R = 4.5;
 // LENGTH but derive Y off HEIGHT to squash the wedge back to the
 // reference stance. TARGET_HEIGHT = TARGET_LENGTH / 3.0.
 const TARGET_LENGTH = 6.7;
-const TARGET_LENGTH_TO_HEIGHT = 3.0;
+const TARGET_LENGTH_TO_HEIGHT = 3.6;
 const TARGET_HEIGHT = TARGET_LENGTH / TARGET_LENGTH_TO_HEIGHT;
 
 export function Cybertruck() {
