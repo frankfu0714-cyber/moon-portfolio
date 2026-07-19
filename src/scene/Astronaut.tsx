@@ -327,7 +327,11 @@ export const Astronaut = forwardRef<AstronautHandle, Props>(function Astronaut(
                   blending={THREE.AdditiveBlending}
                 />
               </mesh>
-              <sprite position={[0, -0.01, 0]} scale={[0.88, 0.88, 1]}>
+              {/* Bright emissive core "ball" at each boot. Frank wants
+                  these larger so the shoe-flame reads with real
+                  presence in float mode — bumped 0.88 -> 1.35 (~1.5x)
+                  keeping the same color/animation. */}
+              <sprite position={[0, -0.01, 0]} scale={[1.35, 1.35, 1]}>
                 <spriteMaterial
                   map={jetGlowTex}
                   transparent
