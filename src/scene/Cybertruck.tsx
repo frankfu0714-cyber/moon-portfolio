@@ -79,10 +79,11 @@ const WIDTH_MULT = 0.75;
 // the "sometimes touches ground" pattern: on rolling terrain a ridge
 // under a rear wheel would poke up through the chassis while the
 // center sampled clear.
-// 0.9 sits the sill at astronaut-waist height — down from the 1.2
-// "chest" pass that Frank flagged as still too high. Max-terrain
+// 1.1 sits the sill at astronaut hip/waist height — Goldilocks
+// after the oscillation history: 1.5 was chest (too high), 1.2 was
+// still too high, 0.9 was too low (nearly touching). Max-terrain
 // sampling keeps this safe against triangle peaks.
-const HOVER_HEIGHT = 0.9;
+const HOVER_HEIGHT = 1.1;
 // The emitter jet group sits BELOW the chassis origin by this
 // fraction of the model's total min-Y extent. Using the full extent
 // (1.0) put emitters at the extreme lowest visible pixel — often a
