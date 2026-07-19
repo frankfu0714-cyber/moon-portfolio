@@ -642,14 +642,36 @@ export function AstronautController() {
     }
 
     // Astronauts on the moon stand UPRIGHT in world space — no
-    // terrain-normal tilt. The old slope-following code (sampleSlope
-    // -> tilt.rotation.x/z) leaned the body into the local surface
-    // normal, which read as "drunk on a slope" and made the character
-    // look like they were sharing the ground plane's rotation with
-    // the Cybertruck (Frank flagged both entities tilting the same
-    // way on a rise). Force x/z to 0; only yaw (heading) rotates.
+    // terrain-normal tilt. Clamp X/Z rotation on BOTH the outer group
+    // (top of the transform chain — nothing above it can smuggle a
+    // parent tilt in) AND the inner tilt group. The temporary warn
+    // fires if anything upstream ever pushed a non-zero X/Z between
+    // frames, so we can catch the source of a regression instead of
+    // silently masking it. Remove the warn once we've confirmed the
+    // clamp holds in the wild.
+    const TILT_EPS = 1e-4;
+    if (
+      Math.abs(astronaut.rotation.x) > TILT_EPS ||
+      Math.abs(astronaut.rotation.z) > TILT_EPS
+    ) {
+      console.warn(
+        "[Astronaut] non-zero rotation clamped",
+        { x: astronaut.rotation.x, z: astronaut.rotation.z },
+      );
+    }
+    astronaut.rotation.x = 0;
+    astronaut.rotation.z = 0;
     const tilt = astronautRef.current?.tilt;
     if (tilt) {
+      if (
+        Math.abs(tilt.rotation.x) > TILT_EPS ||
+        Math.abs(tilt.rotation.z) > TILT_EPS
+      ) {
+        console.warn(
+          "[Astronaut.tilt] non-zero rotation clamped",
+          { x: tilt.rotation.x, z: tilt.rotation.z },
+        );
+      }
       tilt.rotation.x = 0;
       tilt.rotation.z = 0;
     }

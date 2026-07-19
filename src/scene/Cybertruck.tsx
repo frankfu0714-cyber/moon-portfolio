@@ -106,7 +106,6 @@ export function Cybertruck() {
   const groupRef = useRef<THREE.Group>(null);
   const chassisRef = useRef<THREE.Group>(null);
   const jetGroupRef = useRef<THREE.Group>(null);
-  const groundDecalsRef = useRef<(THREE.Mesh | null)[]>([]);
   const { camera } = useThree();
 
   // Live truck state
@@ -352,30 +351,6 @@ export function Cybertruck() {
       speedFrac,
     );
 
-    // Ground decals: 4 flat circles on the terrain, one directly
-    // below each jet emitter. Sample terrain PER decal (not just the
-    // truck center) so on sloped ground each circle hugs its own
-    // local surface height instead of floating. Fade opacity with
-    // jet intensity so they pulse with the thrusters.
-    const cosHd = Math.cos(heading.current);
-    const sinHd = Math.sin(heading.current);
-    const wrapperWorldY = pos.current.y - groundOffset.current;
-    for (let i = 0; i < modelInfo.jetPositions.length; i++) {
-      const decal = groundDecalsRef.current[i];
-      if (!decal) continue;
-      const [jx, jz] = modelInfo.jetPositions[i];
-      // Convert jet's local (jx, jz) to world through the outer
-      // group's heading rotation.
-      const worldX = pos.current.x + jx * cosHd + jz * sinHd;
-      const worldZ = pos.current.z - jx * sinHd + jz * cosHd;
-      const terrainY = sampleTerrainHeight(worldX, worldZ);
-      // Decal is a child of the jet wrapper whose world Y equals
-      // wrapperWorldY. Local Y needed to land world Y = terrain + 0.02.
-      decal.position.y = terrainY + 0.02 - wrapperWorldY;
-      const mat = decal.material as THREE.MeshBasicMaterial;
-      mat.opacity = jetIntensityRef.current * 0.65;
-    }
-
     if (driving) {
       const cosH = Math.cos(heading.current);
       const sinH = Math.sin(heading.current);
@@ -417,7 +392,28 @@ export function Cybertruck() {
     // no future code can accidentally leave a tilt in the transform.
     // Frank kept seeing the truck pitched/rolled after fence collisions
     // even with the earlier clamp higher in the frame; this final pass
-    // makes the guarantee absolute.
+    // makes the guarantee absolute. Temporary warn logs any non-zero
+    // X/Z we catch here so a regression tells us WHICH group and WHICH
+    // frame; remove once we've confirmed the clamp holds in the wild.
+    const TILT_EPS = 1e-4;
+    if (
+      Math.abs(g.rotation.x) > TILT_EPS ||
+      Math.abs(g.rotation.z) > TILT_EPS
+    ) {
+      console.warn("[Cybertruck] outer group non-zero rotation clamped", {
+        x: g.rotation.x,
+        z: g.rotation.z,
+      });
+    }
+    if (
+      Math.abs(c.rotation.x) > TILT_EPS ||
+      Math.abs(c.rotation.z) > TILT_EPS
+    ) {
+      console.warn("[Cybertruck] chassis non-zero rotation clamped", {
+        x: c.rotation.x,
+        z: c.rotation.z,
+      });
+    }
     g.rotation.x = 0;
     g.rotation.z = 0;
     c.rotation.x = 0;
@@ -456,38 +452,14 @@ export function Cybertruck() {
               <HoverJet
                 intensityRef={jetIntensityRef}
                 stretchY={JET_STRETCH_Y}
-                // Every jet gets its own ground light so all four
-                // nozzles paint the terrain, not just the front-left.
-                // Each is dialed to a fraction of the astronaut-boot
-                // brightness so four combined roughly match the old
-                // single-light look without washing the underside white.
-                pointLight
-                lightScale={0.4}
+                // Big round core ball at the emitter (Bloom picks it
+                // up as a bright cyan-blue light source). Matches the
+                // astronaut boot-jet look, just larger for the truck.
+                coreScale={1.9}
+                // Only the front-left jet carries the shared pointLight.
+                // Four stacked lights washed the underside white.
+                pointLight={i === 0}
               />
-              {/* Bright ground-circle decal directly below each
-                  emitter. Sits flat on the terrain (rotation.x =
-                  -PI/2) with Y updated per frame from
-                  sampleTerrainHeight so the disc hugs the ground
-                  even on slopes. Emissive-flavour blue via additive
-                  blending + toneMapped:false so Bloom picks up the
-                  core into a bright pool. */}
-              <mesh
-                ref={(m) => {
-                  groundDecalsRef.current[i] = m;
-                }}
-                rotation={[-Math.PI / 2, 0, 0]}
-              >
-                <circleGeometry args={[0.85, 24]} />
-                <meshBasicMaterial
-                  color="#7ec8ff"
-                  transparent
-                  opacity={0}
-                  depthWrite={false}
-                  toneMapped={false}
-                  blending={THREE.AdditiveBlending}
-                  fog={false}
-                />
-              </mesh>
             </group>
           ))}
         </group>
