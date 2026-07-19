@@ -6,6 +6,7 @@ import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { sampleTerrainHeight } from "@/lib/terrain";
 import { useSceneStore } from "@/lib/store";
+import { HoverJet } from "./HoverJet";
 
 // Tesla-Cybertruck-style low-poly GLB by Mobolaji, sourced from
 // Poly Pizza (CC-BY 3.0). Bundled at /public/models/cybertruck.glb.
@@ -14,20 +15,23 @@ import { useSceneStore } from "@/lib/store";
 // GLB has zero embedded textures - materials are all solid colors,
 // so no trademark wordmark or Tesla logo is baked in.
 //
-// Rebuilt as a HOVER vehicle: wheels + trim cylinders hidden, chassis
-// floats a fixed distance above the sampled terrain, four small blue
-// jet nozzles (matching the astronaut's boot-jet aesthetic) glow at
-// the corners under the sill.
+// Hover conversion: wheels + trim cylinders hidden, chassis floats a
+// fixed distance above the sampled terrain, four small blue jet
+// nozzles (the shared HoverJet component — same aesthetic as the
+// astronaut's FLOAT boots) glow directly under the chassis sill.
 
 const CYBERTRUCK_URL = "/models/cybertruck.glb?v=2";
 useGLTF.preload(CYBERTRUCK_URL);
 
-// Starting placement + rotation. Once driving, these are just the
-// initial values - the truck's own state ref takes over.
 export const CYBERTRUCK_START_X = -8;
 export const CYBERTRUCK_START_Z = 11;
 export const CYBERTRUCK_START_ROT_Y = 0.55;
-export const CYBERTRUCK_COLLISION_R = 5.0;
+// Tightened from the old 5.0 so the astronaut can approach right up
+// to the chassis and the post-exit spawn actually lands next to the
+// door instead of six-plus units off in space. Matches the truck's
+// actual body footprint more honestly (~half-width 1.5, half-length
+// 3.4; 2.8 is a reasonable circle-in-rectangle compromise).
+export const CYBERTRUCK_COLLISION_R = 2.8;
 export const CYBERTRUCK_INTERACT_R = 5.5;
 
 // Live world-space state so the astronaut controller (proximity,
@@ -39,10 +43,7 @@ export const vehicleState = {
   heading: CYBERTRUCK_START_ROT_Y,
 };
 
-// Target world dimensions calibrated to the reference photo. See the
-// last land-Cybertruck PR for the derivation. Length + width + height
-// unchanged from the ground version — this is a look tweak, not a
-// silhouette tweak.
+// Target world dimensions calibrated to the reference photo.
 const TARGET_LENGTH = 6.8;
 const TARGET_HEIGHT = 1.61;
 const WIDTH_MULT = 0.75;
@@ -51,8 +52,6 @@ const WIDTH_MULT = 0.75;
 const HOVER_HEIGHT = 1.2;
 const BOB_AMP = 0.15;
 const BOB_PERIOD = 1.5;
-const TILT_MAX = 0.18;
-const TILT_LERP = 3.0;
 
 // Drive tuning — floatier than the ground version.
 const BASE_SPEED = 5.0;
@@ -69,163 +68,34 @@ const CAM_LOOK_AHEAD = 1.2;
 const CAM_LOOK_UP = 1.4;
 const CAM_LERP = 6;
 
-// Jet VFX — mirrors the astronaut's boot-jet approach:
-// layered cones (wider blue outer + narrow white core), small glow
-// sprite, trailing particle stream. Small + focused, not blob-fire.
-//
-// Four nozzles pulled well INSIDE the truck's footprint on X so the
-// glow never pokes out past the body silhouette, and positioned at
-// the sill (world Y = chassis bottom) so the flame originates from
-// under the truck instead of below-ground. depthTest ON so the
-// chassis actually occludes them from above/behind angles.
-const JET_HALF_TRACK = 0.55;
-const JET_AXLE_Z = 1.4;
+// Jet layout — four HoverJets, one per corner-of-old-wheel-well.
+// Positions in the outer group's LOCAL frame, tucked well INSIDE the
+// truck's silhouette on X (chassis half-width is ~1.5 world units,
+// so ±0.5 sits deep under the belly) and pulled in on Z so the front
+// jets don't peek out ahead of the nose.
+const JET_HALF_TRACK = 0.5;
+const JET_AXLE_Z = 1.1;
 const JET_POSITIONS: [number, number][] = [
   [-JET_HALF_TRACK, -JET_AXLE_Z],
   [JET_HALF_TRACK, -JET_AXLE_Z],
   [-JET_HALF_TRACK, JET_AXLE_Z],
   [JET_HALF_TRACK, JET_AXLE_Z],
 ];
-// Baseline idle intensity so the truck reads as HOVERING even when
-// parked — a full-off jet would suggest "landed" which contradicts
-// the hover conversion.
+// Base intensity while parked so the truck reads as HOVERING even
+// when idle (full-off jets would suggest "landed").
 const JET_IDLE_INTENSITY = 0.35;
 const JET_MAX_INTENSITY = 1.0;
 
-// Soft blue-white radial glow, matching the astronaut's jetGlowTex.
-function makeJetGlowTexture() {
-  const size = 128;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  const c = size / 2;
-  const g = ctx.createRadialGradient(c, c, 0, c, c, c);
-  g.addColorStop(0, "rgba(255,255,255,0.95)");
-  g.addColorStop(0.25, "rgba(190,225,255,0.55)");
-  g.addColorStop(0.6, "rgba(130,190,255,0.16)");
-  g.addColorStop(1, "rgba(130,190,255,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, size, size);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-type JetSystem = {
-  group: THREE.Group;
-  cones: THREE.Mesh[];
-  mats: Array<THREE.MeshBasicMaterial | THREE.SpriteMaterial>;
-  particles: Array<{
-    s: THREE.Sprite;
-    mat: THREE.SpriteMaterial;
-    phase: number;
-    speed: number;
-  }>;
-};
-
-// Build a jet system imperatively so we own every mesh/material ref
-// and can animate them per-frame without any React round-trips. This
-// is the same shape the astronaut uses; the shared JetGlow texture
-// paints identical soft-blue nozzles under the truck's chassis.
-function makeJetSystem(glowTex: THREE.Texture): JetSystem {
-  const group = new THREE.Group();
-  const cones: THREE.Mesh[] = [];
-  const mats: Array<THREE.MeshBasicMaterial | THREE.SpriteMaterial> = [];
-  const particles: JetSystem["particles"] = [];
-
-  JET_POSITIONS.forEach(([x, z], nozzleIdx) => {
-    const nozzle = new THREE.Group();
-    nozzle.position.set(x, 0, z);
-
-    // Outer cone — wider soft-blue flare.
-    const outer = new THREE.Mesh(
-      new THREE.ConeGeometry(0.09, 0.55, 12, 1, true),
-      new THREE.MeshBasicMaterial({
-        color: "#bfe4ff",
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        toneMapped: false,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-      }),
-    );
-    outer.position.y = -0.27;
-    outer.rotation.x = Math.PI; // point tip down
-    nozzle.add(outer);
-    cones.push(outer);
-    mats.push(outer.material as THREE.MeshBasicMaterial);
-
-    // Inner cone — narrow white core.
-    const inner = new THREE.Mesh(
-      new THREE.ConeGeometry(0.045, 0.34, 10, 1, true),
-      new THREE.MeshBasicMaterial({
-        color: "#ffffff",
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        toneMapped: false,
-        blending: THREE.AdditiveBlending,
-      }),
-    );
-    inner.position.y = -0.19;
-    inner.rotation.x = Math.PI;
-    nozzle.add(inner);
-    cones.push(inner);
-    mats.push(inner.material as THREE.MeshBasicMaterial);
-
-    // Nozzle glow — small sprite at the emitter face.
-    const glowMat = new THREE.SpriteMaterial({
-      map: glowTex,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      toneMapped: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const glow = new THREE.Sprite(glowMat);
-    glow.position.set(0, -0.02, 0);
-    glow.scale.set(0.5, 0.5, 1);
-    nozzle.add(glow);
-    mats.push(glowMat);
-
-    // Trailing exhaust particles — 5 recycled sprites per nozzle that
-    // drift down + fade, giving the jet its plume.
-    for (let pi = 0; pi < 5; pi++) {
-      const idx = nozzleIdx * 5 + pi;
-      const pMat = new THREE.SpriteMaterial({
-        map: glowTex,
-        color: "#8fd4ff",
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        toneMapped: false,
-        blending: THREE.AdditiveBlending,
-      });
-      const p = new THREE.Sprite(pMat);
-      p.position.set(0, -0.12, 0);
-      p.scale.set(0.12, 0.12, 1);
-      nozzle.add(p);
-      particles.push({
-        s: p,
-        mat: pMat,
-        phase: (idx * 0.1618) % 1,
-        speed: 1.25 + (idx % 5) * 0.17,
-      });
-    }
-
-    group.add(nozzle);
-  });
-
-  return { group, cones, mats, particles };
-}
+// Collision — obstacles the truck must not clip through. Populated
+// lazily inside useFrame from AstronautController's SOLID_CIRCLES so
+// we avoid a circular import at module init.
+type SolidCircleLike = { x: number; z: number; r: number; truck?: boolean };
 
 export function Cybertruck() {
   const gltf = useGLTF(CYBERTRUCK_URL);
   const groupRef = useRef<THREE.Group>(null);
-  const tiltRef = useRef<THREE.Group>(null);
-  const jetSystemRef = useRef<JetSystem | null>(null);
+  const chassisRef = useRef<THREE.Group>(null);
+  const jetGroupRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
 
   // Live truck state
@@ -234,22 +104,16 @@ export function Cybertruck() {
   );
   const heading = useRef(CYBERTRUCK_START_ROT_Y);
   const speed = useRef(0);
-  const prevSpeed = useRef(0);
-  const pitch = useRef(0);
   const camPos = useRef(new THREE.Vector3());
   const camTarget = useRef(new THREE.Vector3());
   const camInit = useRef(false);
   const tmp = useMemo(() => new THREE.Vector3(), []);
-
-  const jetGlowTex = useMemo(() => makeJetGlowTexture(), []);
-  // The jet system is built imperatively (Three primitives, not R3F)
-  // and mounted via <primitive>. That gives us direct ownership of
-  // every mesh/material without needing a ref juggling ceremony.
-  const jetSystem = useMemo(
-    () => makeJetSystem(jetGlowTex),
-    [jetGlowTex],
-  );
-  jetSystemRef.current = jetSystem;
+  // Per-jet intensity ref — HoverJet reads .current each frame. We
+  // keep one shared ref (all four jets pulse together) since they're
+  // all downstream of the same throttle.
+  const jetIntensityRef = useRef(JET_IDLE_INTENSITY);
+  // Lazy-loaded SOLID_CIRCLES reference. Populated on first frame.
+  const obstaclesRef = useRef<readonly SolidCircleLike[] | null>(null);
 
   const modelInfo = useMemo(() => {
     const scene = gltf.scene.clone(true);
@@ -282,27 +146,37 @@ export function Cybertruck() {
     return { scene, scale };
   }, [gltf.scene]);
 
+  // Ground offset: measure how far the model's bounding box extends
+  // below the chassis group origin. Used with HOVER_HEIGHT to place
+  // the chassis a fixed distance above the sampled terrain.
   const groundOffset = useRef(0);
   useEffect(() => {
-    const t = tiltRef.current;
-    if (!t) return;
-    t.updateMatrixWorld(true);
-    // Measure JUST the truck body, not the jet group (which is
-    // parented to tiltRef too), otherwise the jet cones dragging
-    // down would inflate groundOffset every mount.
-    const scaledModel = t.children.find(
-      (c) => c !== jetSystem.group,
-    );
-    if (!scaledModel) return;
-    const box = new THREE.Box3().setFromObject(scaledModel);
+    const c = chassisRef.current;
+    if (!c) return;
+    c.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(c);
     groundOffset.current = -box.min.y;
-  }, [modelInfo, jetSystem]);
+  }, [modelInfo]);
+
+  // Load SOLID_CIRCLES lazily so we don't create a circular import at
+  // module top-level (AstronautController imports vehicleState from
+  // this file; this file imports SOLID_CIRCLES from that file).
+  useEffect(() => {
+    let cancelled = false;
+    import("./AstronautController").then((mod) => {
+      if (cancelled) return;
+      obstaclesRef.current = mod.SOLID_CIRCLES;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useFrame((state, deltaRaw) => {
     const dt = Math.min(deltaRaw, 0.05);
     const g = groupRef.current;
-    const t = tiltRef.current;
-    if (!g || !t) return;
+    const c = chassisRef.current;
+    if (!g || !c) return;
 
     const { driving, walkInput, activePanel } = useSceneStore.getState();
     const inputActive = driving && !activePanel;
@@ -340,81 +214,86 @@ export function Cybertruck() {
       );
     }
 
+    // Advance position along heading. Resolve collisions BEFORE
+    // writing to pos so the truck doesn't pop-through-and-bounce-back.
     if (Math.abs(speed.current) > 0.001) {
       const dx = Math.sin(heading.current) * speed.current * dt;
       const dz = Math.cos(heading.current) * speed.current * dt;
-      pos.current.x += dx;
-      pos.current.z += dz;
+      let nextX = pos.current.x + dx;
+      let nextZ = pos.current.z + dz;
+
+      // 1. Perimeter fence: radial WALK_BOUND clamp (same as the
+      //    astronaut). WALK_BOUND is 120 in AstronautController; we
+      //    hard-code here instead of importing to avoid an extra
+      //    circular dep. Truck stops at 118 to leave a small margin
+      //    for the neon fence rail's visual thickness.
+      const RADIAL_LIMIT = 118 - CYBERTRUCK_COLLISION_R;
+      const dNext = Math.hypot(nextX, nextZ);
+      if (dNext > RADIAL_LIMIT) {
+        const s = RADIAL_LIMIT / dNext;
+        nextX *= s;
+        nextZ *= s;
+        speed.current = 0; // dead stop at the fence
+      }
+
+      // 2. SOLID_CIRCLES: every static structure the astronaut also
+      //    avoids (habitat modules, lander legs, neon-tower fence
+      //    posts, solar sails, rocket body). Skip our own truck entry
+      //    (identified via .truck).
+      const obstacles = obstaclesRef.current;
+      if (obstacles) {
+        for (const o of obstacles) {
+          if (o.truck) continue;
+          const rr = o.r + CYBERTRUCK_COLLISION_R;
+          const odx = nextX - o.x;
+          const odz = nextZ - o.z;
+          const d = Math.hypot(odx, odz);
+          if (d < rr && d > 1e-4) {
+            // Push the proposed position out to the collision boundary.
+            const push = (rr - d) / d;
+            nextX += odx * push;
+            nextZ += odz * push;
+            speed.current *= 0.35; // strong slow-down on hit
+          }
+        }
+      }
+
+      pos.current.x = nextX;
+      pos.current.z = nextZ;
     }
 
+    // Hover: chassis bottom sits HOVER_HEIGHT above sampled terrain,
+    // with a subtle sin bob so the truck reads as "not stationary".
     const groundY = sampleTerrainHeight(pos.current.x, pos.current.z);
     const time = state.clock.elapsedTime;
     const bob = Math.sin((time / BOB_PERIOD) * Math.PI * 2) * BOB_AMP;
     pos.current.y = groundY + HOVER_HEIGHT + groundOffset.current + bob;
 
-    const dvdt = (speed.current - prevSpeed.current) / Math.max(dt, 1e-4);
-    prevSpeed.current = speed.current;
-    const targetPitch = THREE.MathUtils.clamp(
-      -dvdt * 0.05,
-      -TILT_MAX,
-      TILT_MAX,
-    );
-    pitch.current = THREE.MathUtils.damp(
-      pitch.current,
-      targetPitch,
-      TILT_LERP,
-      dt,
-    );
-    t.rotation.x = pitch.current;
-
+    // Write transform on the outer group. Frank wants the truck LOCKED
+    // level — hover vehicle, no accel-pitch, no terrain-follow roll.
+    // Explicitly zero X and Z rotation every frame so nothing sneaks in.
     g.position.copy(pos.current);
-    g.rotation.y = heading.current;
+    g.rotation.set(0, heading.current, 0);
+    c.rotation.set(0, 0, 0);
 
     vehicleState.x = pos.current.x;
     vehicleState.z = pos.current.z;
     vehicleState.heading = heading.current;
 
-    // Reposition the whole jet group at the chassis sill each frame.
-    // sill is at world Y = pos.y - groundOffset; in tiltRef's local
-    // frame that's Y = -groundOffset.
-    jetSystem.group.position.y = -groundOffset.current;
+    // Repark the jet group at the chassis sill (world Y = chassis
+    // bottom); in the chassis group's local frame that's Y = -groundOffset.
+    if (jetGroupRef.current) {
+      jetGroupRef.current.position.y = -groundOffset.current;
+    }
 
-    // Jet animation — mirrors Astronaut.tsx's boot-jet loop. Idle
-    // intensity keeps the nozzles glowing while parked so the truck
-    // reads as hovering; ramps to full at boost speed.
+    // Drive the shared jet intensity ref — every HoverJet reads it.
+    // Idle baseline so parked jets still glow, ramping with speed.
     const speedFrac = Math.min(Math.abs(speed.current) / BOOST_SPEED, 1);
-    const intensity = THREE.MathUtils.lerp(
+    jetIntensityRef.current = THREE.MathUtils.lerp(
       JET_IDLE_INTENSITY,
       JET_MAX_INTENSITY,
       speedFrac,
     );
-    for (const m of jetSystem.mats) {
-      m.opacity = intensity * (0.6 + Math.random() * 0.4);
-    }
-    for (let i = 0; i < jetSystem.cones.length; i++) {
-      const c = jetSystem.cones[i];
-      c.scale.y =
-        0.72 +
-        0.26 * Math.sin(time * 41 + i * 2.63) +
-        0.14 * Math.sin(time * 89 + i * 5.1) +
-        0.14 * Math.random();
-      const w = 0.85 + 0.22 * Math.random();
-      c.scale.x = w;
-      c.scale.z = w;
-      c.rotation.z = Math.sin(time * 23 + i * 3.7) * 0.08;
-    }
-    for (const pt of jetSystem.particles) {
-      const frac = (time * pt.speed + pt.phase) % 1;
-      pt.s.position.y = -0.12 - frac * 0.6;
-      pt.s.position.x =
-        Math.sin((time * 7 + pt.phase * 40) * pt.speed) * 0.03 * frac;
-      pt.s.position.z =
-        Math.cos((time * 6 + pt.phase * 31) * pt.speed) * 0.03 * frac;
-      const sc = 0.14 * (1 - frac * 0.65);
-      pt.s.scale.set(sc, sc, 1);
-      pt.mat.opacity =
-        intensity * (1 - frac) * (0.65 + 0.3 * Math.random());
-    }
 
     if (driving) {
       const cosH = Math.cos(heading.current);
@@ -454,14 +333,29 @@ export function Cybertruck() {
 
   return (
     <group ref={groupRef}>
-      <group ref={tiltRef}>
+      {/* Chassis group is separate from the outer transform so we can
+          hang the jet group off it (jets follow the chassis, not the
+          camera-side outer group). No tilt applied — Frank wants the
+          truck locked flat. */}
+      <group ref={chassisRef}>
         <group scale={modelInfo.scale}>
           <primitive object={modelInfo.scene} />
         </group>
-        {/* Jet system parented INSIDE the tilt group so nozzles tilt
-            with the chassis. Their Y is repositioned per-frame to the
-            chassis sill via jetSystem.group.position.y. */}
-        <primitive object={jetSystem.group} />
+        {/* Jet group: repositioned each frame to the chassis sill
+            (Y = -groundOffset) so nozzles emit from under the belly,
+            not from the truck's origin (which is above sill). */}
+        <group ref={jetGroupRef}>
+          {JET_POSITIONS.map(([x, z], i) => (
+            <group key={i} position={[x, 0, z]}>
+              <HoverJet
+                intensityRef={jetIntensityRef}
+                // One shared point light per truck is enough — stacking
+                // four would just wash the underside white.
+                pointLight={i === 0}
+              />
+            </group>
+          ))}
+        </group>
       </group>
     </group>
   );

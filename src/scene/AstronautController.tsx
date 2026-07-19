@@ -55,8 +55,9 @@ const FLOAT_SPEED = 3.6; // gliding on jets — clearly faster than a run
 const FLOAT_RUN_SPEED = 5.8; // shift while floating: full thruster burn
 
 // Keep the astronaut on the detailed part of the terrain cap, well away
-// from where the curvature drop-off gets steep.
-const WALK_BOUND = 120;
+// from where the curvature drop-off gets steep. Exported for the truck
+// so it stops at the same perimeter fence.
+export const WALK_BOUND = 120;
 
 // Lander footprint (must match LANDER_X/Z in Scene.tsx).
 const LANDER_X = 10;
@@ -65,8 +66,11 @@ const LANDER_RADIUS = 3.6;
 
 // Static solid footprints (XZ circles): the lander, the two halves of the
 // moon-base habitat cluster, and the rocket launch pad (kept in sync with
-// MoonBase.tsx placements).
-const SOLID_CIRCLES = [
+// MoonBase.tsx placements). Exported so the Cybertruck drive controller
+// can reuse the same set for collision (skipping its own entry via the
+// `truck: true` discriminator).
+export type SolidCircle = { readonly x: number; readonly z: number; r: number; truck?: boolean };
+export const SOLID_CIRCLES: SolidCircle[] = [
   { x: LANDER_X, z: LANDER_Z, r: LANDER_RADIUS },
   // Station habitat modules (narrow strips of small circles along each
   // cylinder instead of two huge discs, so the ground nearby is walkable).
@@ -125,6 +129,7 @@ const SOLID_CIRCLES = [
     get x() { return vehicleState.x; },
     get z() { return vehicleState.z; },
     r: CYBERTRUCK_COLLISION_R,
+    truck: true,
   },
 ];
 
@@ -305,16 +310,26 @@ export function AstronautController() {
     // side (perpendicular to the truck's heading, well outside the
     // truck's collision circle) and reveal the mesh.
     if (wasDriving.current) {
+      // Pop out right next to the driver-side door: perpendicular to
+      // the truck's heading, `collision_r + 0.35` from center so the
+      // astronaut is JUST outside the collision circle (no immediate
+      // push-away pop). Y snaps to the terrain so we're on the ground,
+      // not floating at the truck's driver-seat height.
       const side = vehicleState.heading + Math.PI / 2;
-      const exitDist = CYBERTRUCK_COLLISION_R + 1.6;
-      astronaut.position.x = vehicleState.x + Math.sin(side) * exitDist;
-      astronaut.position.z = vehicleState.z + Math.cos(side) * exitDist;
+      const exitDist = CYBERTRUCK_COLLISION_R + 0.35;
+      const newX = vehicleState.x + Math.sin(side) * exitDist;
+      const newZ = vehicleState.z + Math.cos(side) * exitDist;
+      astronaut.position.x = newX;
+      astronaut.position.z = newZ;
+      astronaut.position.y = walkSurfaceHeight(newX, newZ) + FOOT_OFFSET;
       // Face the truck so the transition reads as "just stepped out."
-      const faceX = vehicleState.x - astronaut.position.x;
-      const faceZ = vehicleState.z - astronaut.position.z;
+      const faceX = vehicleState.x - newX;
+      const faceZ = vehicleState.z - newZ;
       targetHeading.current = Math.atan2(faceX, faceZ);
       heading.current = targetHeading.current;
       velocity.current.set(0, 0, 0);
+      vy.current = 0;
+      airborne.current = false;
       wasDriving.current = false;
     }
     astronaut.visible = true;
