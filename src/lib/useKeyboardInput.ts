@@ -44,9 +44,22 @@ export function useKeyboardInput() {
       }
 
       if (KEY_INTERACT.has(e.code)) {
-        const { nearWaypoint, activePanel, openPanel, closePanel } = store();
+        const {
+          nearWaypoint,
+          activePanel,
+          openPanel,
+          closePanel,
+          nearVehicle,
+          driving,
+          enterVehicle,
+          exitVehicle,
+        } = store();
         if (activePanel) {
           closePanel();
+        } else if (driving) {
+          exitVehicle();
+        } else if (nearVehicle) {
+          enterVehicle();
         } else if (nearWaypoint) {
           openPanel(nearWaypoint);
         }

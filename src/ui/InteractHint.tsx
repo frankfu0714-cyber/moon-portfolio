@@ -7,10 +7,11 @@ type Props = {
   label: string;
   labelZh: string;
   color: string;
+  verb?: string; // English verb before the label, e.g. "View" or "Enter"
   onTap: () => void;
 };
 
-export function InteractHint({ visible, label, labelZh, color, onTap }: Props) {
+export function InteractHint({ visible, label, labelZh, color, verb = "View", onTap }: Props) {
   return (
     <AnimatePresence>
       {visible && (
@@ -39,7 +40,7 @@ export function InteractHint({ visible, label, labelZh, color, onTap }: Props) {
                 tap
               </span>
               <span>
-                View <span style={{ color }}>{label}</span>
+                {verb} <span style={{ color }}>{label}</span>
                 <span className="opacity-60 ml-2 text-[12px]">{labelZh}</span>
               </span>
             </div>

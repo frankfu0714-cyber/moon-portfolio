@@ -46,7 +46,15 @@ export function HUD() {
   const floatMode = useSceneStore((s) => s.floatMode);
   const toggleAutoRoam = useSceneStore((s) => s.toggleAutoRoam);
   const toggleFloatMode = useSceneStore((s) => s.toggleFloatMode);
+  const nearVehicle = useSceneStore((s) => s.nearVehicle);
+  const driving = useSceneStore((s) => s.driving);
+  const enterVehicle = useSceneStore((s) => s.enterVehicle);
+  const exitVehicle = useSceneStore((s) => s.exitVehicle);
   const near = WAYPOINTS.find((w) => w.id === nearWaypoint);
+  // Vehicle interact wins over waypoint interact when both are in range.
+  const showVehicleHint = (nearVehicle || driving) && !activePanel;
+  const vehicleHintLabel = driving ? "exit Cybertruck" : "enter Cybertruck";
+  const vehicleHintZh = driving ? "下車" : "上車";
 
   const [hintsVisible, setHintsVisible] = useState(true);
   useEffect(() => {
@@ -90,14 +98,26 @@ export function HUD() {
         </AnimatePresence>
       </div>
 
-      {/* Interact hint centered above head */}
-      <InteractHint
-        visible={!!near && !activePanel}
-        label={near?.label ?? ""}
-        labelZh={near?.labelZh ?? ""}
-        color={near?.flagColor ?? "#fff"}
-        onTap={() => near && openPanel(near.id)}
-      />
+      {/* Interact hint centered above head. Vehicle enter/exit takes
+          priority so E always means one thing in the moment. */}
+      {showVehicleHint ? (
+        <InteractHint
+          visible={true}
+          label={vehicleHintLabel}
+          labelZh={vehicleHintZh}
+          color="#9dd6ff"
+          verb=""
+          onTap={() => (driving ? exitVehicle() : enterVehicle())}
+        />
+      ) : (
+        <InteractHint
+          visible={!!near && !activePanel}
+          label={near?.label ?? ""}
+          labelZh={near?.labelZh ?? ""}
+          color={near?.flagColor ?? "#fff"}
+          onTap={() => near && openPanel(near.id)}
+        />
+      )}
 
       {/* Mobile d-pad */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 sm:hidden">

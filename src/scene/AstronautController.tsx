@@ -10,6 +10,7 @@ import { useSceneStore } from "@/lib/store";
 import { WAYPOINTS, type WaypointId } from "@/lib/waypoints";
 import { sampleMeshHeight, sampleSlope } from "@/lib/terrain";
 import { ROCKS, resolveRockCollision } from "@/lib/rocks";
+import { vehicleState, CYBERTRUCK_INTERACT_R, CYBERTRUCK_COLLISION_R } from "./Cybertruck";
 
 const WALK_SPEED = 1.2; // units/sec — chill vibe
 const RUN_SPEED = 2.6; // units/sec — "run slowly" jog
@@ -109,8 +110,15 @@ const SOLID_CIRCLES = [
   { x: 3.74, z: 15.09, r: 1.1 },
   { x: 4.86, z: 17.87, r: 1.1 },
   { x: 5.97, z: 20.66, r: 1.1 },
-  // Cybertruck (mirrors CYBERTRUCK_X/Z in Cybertruck.tsx).
-  { x: -8, z: 11, r: 4.5 },
+  // Cybertruck collision reads live vehicleState so the astronaut
+  // avoids the truck wherever it currently sits (not just its parked
+  // spawn location). Getter properties keep the existing consumer code
+  // (obstacle loops, collision resolution) unchanged.
+  {
+    get x() { return vehicleState.x; },
+    get z() { return vehicleState.z; },
+    r: CYBERTRUCK_COLLISION_R,
+  },
 ];
 
 // Roam-mode obstacle avoidance: everything solid (structures + tall
@@ -266,13 +274,55 @@ export function AstronautController() {
     };
   }, []);
 
+  // Track the previous driving state so we can detect the enter→exit
+  // transition and pop the astronaut out beside the driver-side door.
+  const wasDriving = useRef(false);
+
   useFrame((_, deltaRaw) => {
     const dt = Math.min(deltaRaw, 0.05);
     const astronaut = astronautRef.current?.group;
     if (!astronaut) return;
 
-    const { walkInput, activePanel, autoRoam, floatMode } =
+    const { walkInput, activePanel, autoRoam, floatMode, driving, setNearVehicle } =
       useSceneStore.getState();
+
+    // While driving, the Cybertruck owns the camera and the astronaut
+    // is invisible. Skip all walk/roam/camera work here entirely.
+    if (driving) {
+      astronaut.visible = false;
+      wasDriving.current = true;
+      return;
+    }
+
+    // Just exited: teleport the astronaut next to the truck's driver
+    // side (perpendicular to the truck's heading, well outside the
+    // truck's collision circle) and reveal the mesh.
+    if (wasDriving.current) {
+      const side = vehicleState.heading + Math.PI / 2;
+      const exitDist = CYBERTRUCK_COLLISION_R + 1.6;
+      astronaut.position.x = vehicleState.x + Math.sin(side) * exitDist;
+      astronaut.position.z = vehicleState.z + Math.cos(side) * exitDist;
+      // Face the truck so the transition reads as "just stepped out."
+      const faceX = vehicleState.x - astronaut.position.x;
+      const faceZ = vehicleState.z - astronaut.position.z;
+      targetHeading.current = Math.atan2(faceX, faceZ);
+      heading.current = targetHeading.current;
+      velocity.current.set(0, 0, 0);
+      wasDriving.current = false;
+    }
+    astronaut.visible = true;
+
+    // Near-vehicle proximity: publish so the HUD can render the
+    // "E · enter Cybertruck" hint.
+    {
+      const dx = astronaut.position.x - vehicleState.x;
+      const dz = astronaut.position.z - vehicleState.z;
+      const near = dx * dx + dz * dz < CYBERTRUCK_INTERACT_R * CYBERTRUCK_INTERACT_R;
+      if (near !== useSceneStore.getState().nearVehicle) {
+        setNearVehicle(near);
+      }
+    }
+
     const inputActive = !activePanel;
     const manualActive =
       inputActive && (walkInput.forward !== 0 || walkInput.strafe !== 0);
