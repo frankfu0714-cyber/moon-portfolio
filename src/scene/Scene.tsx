@@ -638,8 +638,8 @@ export function Scene() {
       </SafeAsset>
 
       {/* Cinematic lunar lighting: one hard low sun that casts real
-          shadows (rocks + astronaut), almost no fill — deep black shadow
-          sides like the reference footage. */}
+          shadows, almost no fill — deep black shadow sides like the
+          reference footage. */}
       <hemisphereLight args={["#aebfe0", "#3a352d", 0.2]} />
       <directionalLight
         position={[45, 13, -18]}
