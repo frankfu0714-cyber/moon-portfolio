@@ -25,11 +25,11 @@ useGLTF.preload(CYBERTRUCK_URL);
 export const CYBERTRUCK_X = 8;
 export const CYBERTRUCK_Z = 8;
 export const CYBERTRUCK_ROT_Y = 0.55; // ~31 degrees off axis
-export const CYBERTRUCK_COLLISION_R = 2.8;
+export const CYBERTRUCK_COLLISION_R = 4.3;
 
 // Target world length for the truck. We compute the model's native
 // bounding-box length on load and scale to hit this target.
-const TARGET_LENGTH = 4.2;
+const TARGET_LENGTH = 6.5;
 
 export function Cybertruck() {
   const gltf = useGLTF(CYBERTRUCK_URL);
