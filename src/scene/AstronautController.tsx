@@ -44,6 +44,7 @@ const FLOAT_BOB_AMP = 0.09;
 const FLOAT_BOB_HZ = 0.55;
 const FLOAT_BLEND_LAMBDA = 3.2;
 const FLOAT_SPEED = 3.6; // gliding on jets — clearly faster than a run
+const FLOAT_RUN_SPEED = 5.8; // shift while floating: full thruster burn
 
 // Keep the astronaut on the detailed part of the terrain cap, well away
 // from where the curvature drop-off gets steep.
@@ -290,10 +291,12 @@ export function AstronautController() {
     // ~150ms transition matches SPEED_CAP_LAMBDA.
     const wantsRun = inputActive && walkInput.running;
     const baseCap = wantsRun ? RUN_SPEED : WALK_SPEED;
-    // Hovering glides a touch faster than a stroll.
+    // Hovering glides quicker than a stroll; shift-hold while floating
+    // fires a full thruster burn on top of the base float speed.
+    const floatCap = wantsRun ? FLOAT_RUN_SPEED : FLOAT_SPEED;
     const targetCap = THREE.MathUtils.lerp(
       baseCap,
-      Math.max(baseCap, FLOAT_SPEED),
+      Math.max(baseCap, floatCap),
       floatBlend.current,
     );
     speedCap.current = THREE.MathUtils.damp(
