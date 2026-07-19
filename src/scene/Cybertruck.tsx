@@ -22,7 +22,7 @@ useGLTF.preload(CYBERTRUCK_URL);
 export const CYBERTRUCK_START_X = -8;
 export const CYBERTRUCK_START_Z = 11;
 export const CYBERTRUCK_START_ROT_Y = 0.55;
-export const CYBERTRUCK_COLLISION_R = 4.5;
+export const CYBERTRUCK_COLLISION_R = 5.0;
 // Enter-range: how close the astronaut has to be to see the "E · enter" hint.
 export const CYBERTRUCK_INTERACT_R = 5.5;
 
@@ -40,7 +40,7 @@ export const vehicleState = {
 // 1.80 * 0.97 ≈ 1.75 world units) so the driver appears sized to the
 // vehicle. Ratio comes out ~3.83:1, close to the real 3:1 spec once
 // you account for the tall canopy on this low-poly GLB.
-const TARGET_LENGTH = 6.7;
+const TARGET_LENGTH = 7.8;
 const TARGET_HEIGHT = 1.75;
 
 // Drive tuning
