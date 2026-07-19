@@ -109,12 +109,24 @@ const ACCEL_LAMBDA = 1.5;
 const TURN_RATE_LOW = 1.05;
 const TURN_RATE_HIGH = 0.42;
 
-// Chase camera when driving.
-const CAM_LOCAL_Y = 3.6;
-const CAM_LOCAL_BACK = 8.8;
+// Chase camera when driving: user-controllable orbit around the truck.
+// Mouse drag → yaw + pitch; scroll wheel → zoom distance. Yaw is stored
+// as an OFFSET from the truck's heading so the camera stays behind the
+// truck by default while the truck turns. Press C to snap the orbit
+// back to defaults.
+const CAM_DEFAULT_YAW_OFFSET = 0; // radians, 0 = directly behind
+const CAM_DEFAULT_PITCH = 0.38;
+const CAM_DEFAULT_DIST = 9.5;
+const CAM_PITCH_MIN = -0.35;
+const CAM_PITCH_MAX = 1.15;
+const CAM_DIST_MIN = 4;
+const CAM_DIST_MAX = 20;
 const CAM_LOOK_AHEAD = 1.2;
 const CAM_LOOK_UP = 1.4;
 const CAM_LERP = 6;
+// Camera-floor clearance above the terrain — never let the free-look
+// camera sink into the mesh even at low pitches.
+const CAM_FLOOR_LIFT = 0.6;
 
 // Jet layout — one HoverJet at each of the four ORIGINAL wheel-node
 // positions from the GLB (Sphere.001..004). We snapshot the wheel
@@ -158,6 +170,13 @@ export function Cybertruck() {
   const jetIntensityRef = useRef(JET_IDLE_INTENSITY);
   // Lazy-loaded SOLID_CIRCLES reference. Populated on first frame.
   const obstaclesRef = useRef<readonly SolidCircleLike[] | null>(null);
+  // Free-orbit chase-cam state (driving only). Yaw is an OFFSET from
+  // the truck's heading so the camera follows the truck's turns by
+  // default. Pitch and dist are absolute.
+  const orbitYawOffset = useRef(CAM_DEFAULT_YAW_OFFSET);
+  const orbitPitch = useRef(CAM_DEFAULT_PITCH);
+  const orbitDist = useRef(CAM_DEFAULT_DIST);
+  const dragging = useRef(false);
 
   const modelInfo = useMemo(() => {
     const scene = gltf.scene.clone(true);
@@ -247,6 +266,68 @@ export function Cybertruck() {
     const box = new THREE.Box3().setFromObject(scaledModel);
     groundOffset.current = -box.min.y;
   }, [modelInfo]);
+
+  // Drive-mode camera controls: mirror the astronaut's mouse-drag +
+  // wheel-zoom orbit. All listeners no-op unless the truck is being
+  // driven, so they don't interfere with the walking free-look. Skip
+  // events whose target is UI so clicking a HUD button doesn't grab a
+  // drag. Press C to reset orbit yaw/pitch/dist back to defaults.
+  useEffect(() => {
+    const isDriving = () => useSceneStore.getState().driving;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!isDriving()) return;
+      if (e.button !== 0) return;
+      const el = e.target as HTMLElement | null;
+      if (el && el.closest("button, a, input, [data-ui]")) return;
+      dragging.current = true;
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      orbitYawOffset.current -= e.movementX * 0.005;
+      orbitPitch.current = THREE.MathUtils.clamp(
+        orbitPitch.current + e.movementY * 0.004,
+        CAM_PITCH_MIN,
+        CAM_PITCH_MAX,
+      );
+    };
+    const onPointerUp = () => {
+      dragging.current = false;
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!isDriving()) return;
+      // deltaMode 1 (line-based, e.g. Firefox) reports ~1/33 of pixel
+      // deltas — normalize before exponentiating so wheel feel matches
+      // across browsers.
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+      orbitDist.current = THREE.MathUtils.clamp(
+        orbitDist.current * Math.exp(dy * 0.0012),
+        CAM_DIST_MIN,
+        CAM_DIST_MAX,
+      );
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (!isDriving()) return;
+      if (e.key === "c" || e.key === "C") {
+        orbitYawOffset.current = CAM_DEFAULT_YAW_OFFSET;
+        orbitPitch.current = CAM_DEFAULT_PITCH;
+        orbitDist.current = CAM_DEFAULT_DIST;
+      }
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    window.addEventListener("wheel", onWheel, { passive: true });
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
 
   // Load SOLID_CIRCLES lazily so we don't create a circular import at
   // module top-level (AstronautController imports vehicleState from
@@ -439,15 +520,26 @@ export function Cybertruck() {
     );
 
     if (driving) {
-      const cosH = Math.cos(heading.current);
-      const sinH = Math.sin(heading.current);
-      const backDX = -sinH * CAM_LOCAL_BACK;
-      const backDZ = -cosH * CAM_LOCAL_BACK;
-      tmp.set(
-        pos.current.x + backDX,
-        pos.current.y + CAM_LOCAL_Y,
-        pos.current.z + backDZ,
-      );
+      // Free-orbit chase-cam: user-drag yaw/pitch/zoom around the
+      // truck. Yaw is stored as an OFFSET from the truck's heading
+      // so the camera follows the truck's turns by default (matches
+      // the old locked chase-cam behaviour) while still letting the
+      // user drag to look around. Camera lerps toward the ideal
+      // spherical position each frame for smoothing.
+      const yaw = heading.current + orbitYawOffset.current;
+      const cosY = Math.cos(yaw);
+      const sinY = Math.sin(yaw);
+      const cosP = Math.cos(orbitPitch.current);
+      const desX = pos.current.x - sinY * cosP * orbitDist.current;
+      const desZ = pos.current.z - cosY * cosP * orbitDist.current;
+      let desY =
+        pos.current.y +
+        Math.sin(orbitPitch.current) * orbitDist.current +
+        CAM_LOOK_UP;
+      // Never sink the camera into the regolith at low pitches.
+      const floorY = sampleMeshHeight(desX, desZ) + CAM_FLOOR_LIFT;
+      if (desY < floorY) desY = floorY;
+      tmp.set(desX, desY, desZ);
       if (!camInit.current) {
         camPos.current.copy(tmp);
         camInit.current = true;
@@ -456,6 +548,13 @@ export function Cybertruck() {
       camPos.current.y = THREE.MathUtils.damp(camPos.current.y, tmp.y, CAM_LERP, dt);
       camPos.current.z = THREE.MathUtils.damp(camPos.current.z, tmp.z, CAM_LERP, dt);
 
+      // Look-target: slightly ahead of the truck along its heading,
+      // with a small upward bias so the view reads as a chase, not a
+      // top-down. Ahead direction uses the truck heading (not the
+      // orbit yaw) so orbiting the camera never rotates what the
+      // camera is looking at — the truck stays framed.
+      const cosH = Math.cos(heading.current);
+      const sinH = Math.sin(heading.current);
       const aheadX = pos.current.x + sinH * CAM_LOOK_AHEAD;
       const aheadZ = pos.current.z + cosH * CAM_LOOK_AHEAD;
       camTarget.current.x = THREE.MathUtils.damp(camTarget.current.x, aheadX, CAM_LERP, dt);
