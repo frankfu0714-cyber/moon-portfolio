@@ -30,9 +30,21 @@ const CANVAS_GLOBE_R = 150;
 // shader — using the SPRITE position (not the directional light's
 // position) so what the player sees glowing in the sky is what casts
 // Earth's daylight.
+//
+// NOTE: Frank asks for the LIT hemisphere of Earth to appear on the
+// RIGHT side of the visible disc from the astronaut's typical POV.
+// The world sun is in +X (which projects to screen-LEFT from the
+// default camera orientation), so the physically-correct sun-facing
+// hemisphere ends up on screen-LEFT — the opposite of what Frank
+// wants visually. We NEGATE the direction so the shader lights the
+// hemisphere Frank expects. This is a viewing-preference decision,
+// not physics; the moon terrain lighting and shadows are unchanged.
 const EARTH_WORLD = new THREE.Vector3(14, 72, 236);
 const SUN_WORLD = new THREE.Vector3(450, 130, -180);
-const SUN_FROM_EARTH = SUN_WORLD.clone().sub(EARTH_WORLD).normalize();
+const SUN_FROM_EARTH = SUN_WORLD.clone()
+  .sub(EARTH_WORLD)
+  .normalize()
+  .negate();
 
 // Painted halo: a smooth radial gradient behind the globe. No fake
 // sun-side crescent any more — the shader draws that per-fragment on
