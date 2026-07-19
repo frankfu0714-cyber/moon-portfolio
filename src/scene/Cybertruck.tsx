@@ -73,13 +73,16 @@ const TARGET_HEIGHT = 1.61;
 const WIDTH_MULT = 0.75;
 
 // Hover tuning
-// Chassis bottom rides this many world units above the sampled terrain.
-// 1.3 lands the sill at roughly astronaut-waist/chest height — the
-// Goldilocks zone between "close to the ground" (previous 0.5–1.9
-// runs) and "way up at head height" (the 3.0 overcorrection). Now
-// that groundOffset filters out hidden wheel meshes (see below), this
-// constant literally means "visible sill above terrain".
-const HOVER_HEIGHT = 1.3;
+// Chassis bottom rides this many world units above the MAX terrain
+// height sampled under the truck's footprint (center + 4 wheel
+// contact points). Sampling the max — not just the center — is what
+// prevents the "sometimes touches ground" pattern Frank kept seeing:
+// on rolling terrain a ridge under a rear wheel could poke up
+// through the chassis while the center point was still clear.
+// 1.5 puts the sill at roughly astronaut-waist/chest height with a
+// safety margin over the previous 1.3 (which was too close on the
+// visible-mesh triangles that peak between vertex heights).
+const HOVER_HEIGHT = 1.5;
 // Emitter positions come from the GLB's original wheel nodes (see
 // modelInfo.jetPositions). Real wheels sit at the outer edges of the
 // body — fine for wheels, but the hover thrusters read as too wide
@@ -452,16 +455,25 @@ export function Cybertruck() {
       pos.current.z = nextZ;
     }
 
-    // Hover: chassis bottom sits HOVER_HEIGHT above the RENDERED
-    // terrain surface, with a subtle sin bob so the truck reads as
-    // "not stationary". Use sampleMeshHeight (exact triangle-interp
-    // of the displaced plane) not sampleTerrainHeight (analytic
-    // heightfield) — between mesh vertices the GPU-interpolated
-    // surface can sit above the analytic one, which was letting the
-    // truck sink into visible depressions even though the analytic
-    // math said it was floating. Sampled every frame at current
+    // Hover: chassis bottom sits HOVER_HEIGHT above the HIGHEST
+    // terrain point under the truck's footprint (center + 4 wheel
+    // contact positions). Sampling the MAX — not just the center —
+    // is what prevents the "sometimes touches ground" bug: on
+    // rolling terrain a ridge under a rear wheel could poke up
+    // through the chassis while the center point was still clear.
+    // sampleMeshHeight (exact triangle-interp of the displaced
+    // plane) not sampleTerrainHeight, so we match the visible
+    // surface pixel-for-pixel. Sampled every frame at current
     // pos.x/z after collision resolution — no caching, no lag.
-    const groundY = sampleMeshHeight(pos.current.x, pos.current.z);
+    const cHd = Math.cos(heading.current);
+    const sHd = Math.sin(heading.current);
+    let groundY = sampleMeshHeight(pos.current.x, pos.current.z);
+    for (const [jx, jz] of modelInfo.jetPositions) {
+      const wx = pos.current.x + jx * cHd + jz * sHd;
+      const wz = pos.current.z - jx * sHd + jz * cHd;
+      const y = sampleMeshHeight(wx, wz);
+      if (y > groundY) groundY = y;
+    }
     const time = state.clock.elapsedTime;
     const bob = Math.sin((time / BOB_PERIOD) * Math.PI * 2) * BOB_AMP;
     pos.current.y = groundY + HOVER_HEIGHT + groundOffset.current + bob;
