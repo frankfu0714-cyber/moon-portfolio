@@ -20,16 +20,22 @@ import { sampleTerrainHeight } from "@/lib/terrain";
 const CYBERTRUCK_URL = "/models/cybertruck.glb";
 useGLTF.preload(CYBERTRUCK_URL);
 
-// Placement: parked between the spawn plaza and the lander so it reads
-// from the first frame. Angled so it doesn't sit parallel to the lander.
-export const CYBERTRUCK_X = 8;
-export const CYBERTRUCK_Z = 8;
+// Placement: parked on the flattest patch of natural terrain within
+// spawn view (13.6 units from origin, right-of-lander from the spawn
+// camera). The previous (8, 8) spot sat on cratered ground where the
+// wheels straddled bumps and the truck read as tilted; a one-shot
+// grid search of sampleTerrainHeight over the 8-14-unit ring showed
+// this coord has a total height range of ~3.6cm across a 3-unit
+// radius (~6x flatter than the old spot). Angled so it doesn't sit
+// parallel to the lander.
+export const CYBERTRUCK_X = -8;
+export const CYBERTRUCK_Z = 11;
 export const CYBERTRUCK_ROT_Y = 0.55; // ~31 degrees off axis
-export const CYBERTRUCK_COLLISION_R = 4.3;
+export const CYBERTRUCK_COLLISION_R = 4.5;
 
 // Target world length for the truck. We compute the model's native
 // bounding-box length on load and scale to hit this target.
-const TARGET_LENGTH = 6.5;
+const TARGET_LENGTH = 6.7;
 
 export function Cybertruck() {
   const gltf = useGLTF(CYBERTRUCK_URL);
