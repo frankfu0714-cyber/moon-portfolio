@@ -427,9 +427,13 @@ export function Cybertruck() {
               <HoverJet
                 intensityRef={jetIntensityRef}
                 stretchY={JET_STRETCH_Y}
-                // One shared point light per truck is enough — stacking
-                // four would just wash the underside white.
-                pointLight={i === 0}
+                // Every jet gets its own ground light so all four
+                // nozzles paint the terrain, not just the front-left.
+                // Each is dialed to a fraction of the astronaut-boot
+                // brightness so four combined roughly match the old
+                // single-light look without washing the underside white.
+                pointLight
+                lightScale={0.4}
               />
             </group>
           ))}

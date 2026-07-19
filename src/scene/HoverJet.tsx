@@ -26,9 +26,12 @@ export type HoverJetHandle = {
 
 type Props = {
   intensityRef: React.MutableRefObject<number>;
-  // Optional cluster-level point light (recommended: enable only on
-  // ONE of the jets in a cluster so we don't stack overlapping lights).
+  // Optional per-jet point light so the ground under each nozzle
+  // catches a warm blue spill. Callers can dial `lightScale` down
+  // when they're mounting many jets in the same cluster (Cybertruck
+  // uses 4) so the summed intensity doesn't white-out the underside.
   pointLight?: boolean;
+  lightScale?: number;
   // Non-uniform vertical stretch for the flame stack — cones, glow
   // sprite, AND particle trails elongate together so the whole jet
   // reads as a longer thruster streak. Default 1 (astronaut boot
@@ -64,7 +67,7 @@ function getGlowTex() {
 }
 
 export const HoverJet = forwardRef<HoverJetHandle, Props>(function HoverJet(
-  { intensityRef, pointLight = false, stretchY = 1 },
+  { intensityRef, pointLight = false, lightScale = 1, stretchY = 1 },
   ref,
 ) {
   const groupRef = useRef<THREE.Group>(null);
@@ -135,7 +138,8 @@ export const HoverJet = forwardRef<HoverJetHandle, Props>(function HoverJet(
       m.opacity = intensity * (0.6 + Math.random() * 0.4);
     }
     if (lightRef.current) {
-      lightRef.current.intensity = intensity * (2.0 + Math.random() * 2.2);
+      lightRef.current.intensity =
+        intensity * (2.0 + Math.random() * 2.2) * lightScale;
     }
 
     const t = state.clock.elapsedTime;
