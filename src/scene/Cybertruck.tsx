@@ -74,11 +74,13 @@ const WIDTH_MULT = 0.75;
 
 // Hover tuning
 // Chassis bottom rides this many world units above the sampled terrain.
-// 1.9 lands the sill above astronaut-chest height — clearly hovering,
-// with plenty of vertical space for the long flame plumes to reach
-// down toward the ground. Frank's ask after several bumps: firmly
-// higher, no more "still too low".
-const HOVER_HEIGHT = 1.9;
+// 3.0 puts the sill at roughly 1.7× astronaut height (astronaut is
+// 1.75 tall) — a clearly-hovering gap that photographs as "obviously
+// floating" from any distance, not "close to the ground".
+// NOTE: measured against the VISIBLE chassis min-Y (groundOffset
+// filters out hidden wheel meshes so this constant means what it
+// says — see groundOffset useEffect below).
+const HOVER_HEIGHT = 3.0;
 // Emitter positions come from the GLB's original wheel nodes (see
 // modelInfo.jetPositions). Real wheels sit at the outer edges of the
 // body — fine for wheels, but the hover thrusters read as too wide
@@ -244,26 +246,44 @@ export function Cybertruck() {
     return { scene, scale, jetPositions };
   }, [gltf.scene]);
 
-  // Ground offset: measure how far the model's bounding box extends
+  // Ground offset: measure how far the VISIBLE chassis body extends
   // below the chassis group origin. Used with HOVER_HEIGHT to place
   // the chassis a fixed distance above the sampled terrain.
+  //
+  // Two gotchas we defend against here (both bit us before):
+  //   1. Don't measure the jet group — its stretched flame cones
+  //      extend well below the chassis body and would inflate this.
+  //   2. Don't include HIDDEN meshes (Sphere.*/Cylinder.* wheel and
+  //      trim nodes are hidden but their geometry still counts in a
+  //      naive Box3.setFromObject). The wheels extend below the
+  //      chassis; if they're counted, HOVER_HEIGHT no longer means
+  //      "visible sill to terrain" — the truck ends up sitting lower
+  //      than the constant claims.
   const groundOffset = useRef(0);
   useEffect(() => {
     const c = chassisRef.current;
     if (!c) return;
     c.updateMatrixWorld(true);
-    // CRITICAL: measure ONLY the scaled-model child, NOT the whole
-    // chassis group. The chassis also holds the jet group whose flame
-    // cones extend well below the chassis body (up to stretchY * 0.55
-    // ≈ 1.4 units past the emitter). Measuring the whole group made
-    // groundOffset inflate by that amount, which then lifted the
-    // entire truck by the same amount — the reason Frank kept seeing
-    // the sill floating at chest/shoulder height instead of at knee.
-    // We want the body-bottom-to-terrain distance to be HOVER_HEIGHT,
-    // not the (body-bottom - flame-tip)-to-terrain distance.
-    const scaledModel = c.children.find((child) => child !== jetGroupRef.current);
+    const scaledModel = c.children.find(
+      (child) => child !== jetGroupRef.current,
+    );
     if (!scaledModel) return;
-    const box = new THREE.Box3().setFromObject(scaledModel);
+    const box = new THREE.Box3();
+    const tmpBox = new THREE.Box3();
+    scaledModel.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      // Skip if the mesh itself OR any ancestor up to scaledModel is
+      // hidden — matches what the renderer actually draws.
+      let cursor: THREE.Object3D | null = obj;
+      while (cursor && cursor !== scaledModel.parent) {
+        if (cursor.visible === false) return;
+        cursor = cursor.parent;
+      }
+      tmpBox.setFromObject(mesh);
+      box.union(tmpBox);
+    });
+    if (!isFinite(box.min.y)) return;
     groundOffset.current = -box.min.y;
   }, [modelInfo]);
 

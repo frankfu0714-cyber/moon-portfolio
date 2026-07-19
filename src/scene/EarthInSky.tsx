@@ -136,15 +136,15 @@ const EARTH_FRAGMENT = /* glsl */ `
     color += vec3(0.06, 0.10, 0.16) * dayness;
 
     // Fresnel-based atmospheric limb glow: max at grazing view
-    // angles, modulated by how sun-facing the limb is. Cyan-blue
-    // arc on the sunlit hemisphere's edge; the shadowed limb keeps
-    // a faint blue haze.
-    float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.4);
+    // angles, and GATED by sun-facing. The shadowed limb gets no
+    // rim contribution at all (previous version added a faint haze
+    // that read as an unwanted bright arc on the night limb).
+    // Sharper falloff (pow 3.2) so the arc is a thin crescent on
+    // the sunlit edge, not a fat halo.
+    float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.2);
     float sunAmount = clamp(sunFacing, 0.0, 1.0);
     vec3 atmoSun = vec3(0.55, 0.78, 1.15);
-    vec3 atmoDim = vec3(0.20, 0.30, 0.48);
-    vec3 rimColor = mix(atmoDim, atmoSun, sunAmount);
-    color += rimColor * rim * (0.35 + sunAmount * 1.55);
+    color += atmoSun * rim * sunAmount * 1.1;
 
     gl_FragColor = vec4(color, 1.0);
   }
