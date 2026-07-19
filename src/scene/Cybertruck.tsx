@@ -49,9 +49,18 @@ const TARGET_HEIGHT = 1.61;
 const WIDTH_MULT = 0.75;
 
 // Hover tuning
-const HOVER_HEIGHT = 1.2;
+// Chassis bottom rides this many world units above the sampled terrain.
+// 0.65 = just enough visible clearance for the flame trails to show;
+// tighter than the old 1.2 which read as "levitating a bit too high".
+const HOVER_HEIGHT = 0.65;
 const BOB_AMP = 0.15;
 const BOB_PERIOD = 1.5;
+// Vertical stretch applied to the HoverJet flame stack — cones and
+// particles both elongate downward so the jets read as real thrusters
+// spraying, not short blobs. Terrain occludes anything past ground
+// plane, so the visible portion above ground stays bright while the
+// tail cleanly fades into the regolith.
+const JET_STRETCH_Y = 2.6;
 
 // Drive tuning — floatier than the ground version.
 const BASE_SPEED = 5.0;
@@ -384,6 +393,7 @@ export function Cybertruck() {
             <group key={i} position={[x, 0, z]}>
               <HoverJet
                 intensityRef={jetIntensityRef}
+                stretchY={JET_STRETCH_Y}
                 // One shared point light per truck is enough — stacking
                 // four would just wash the underside white.
                 pointLight={i === 0}
