@@ -8,7 +8,7 @@ import { DustPuffs, type DustPuffsHandle } from "./DustPuffs";
 import { SafeAsset } from "./SafeAsset";
 import { useSceneStore } from "@/lib/store";
 import { WAYPOINTS, type WaypointId } from "@/lib/waypoints";
-import { sampleMeshHeight, sampleSlope } from "@/lib/terrain";
+import { sampleMeshHeight } from "@/lib/terrain";
 import { ROCKS, resolveRockCollision } from "@/lib/rocks";
 import { vehicleState, CYBERTRUCK_INTERACT_R, CYBERTRUCK_COLLISION_R } from "./Cybertruck";
 import {
@@ -183,8 +183,6 @@ const AVOID_STRENGTH = 1.7; // how hard the path bends around them
 // Terrain-following.
 const FOOT_OFFSET = 0.02;
 const HEIGHT_LERP = 0.15; // per-frame low-pass; kills crater-rim jitter
-const MAX_PITCH = 0.17; // ~10°
-const PITCH_LERP = 0.12;
 
 // Camera constants
 const CAM_HEIGHT = 3.2;
@@ -654,24 +652,17 @@ export function AstronautController() {
       );
     }
 
-    // Body pitch/roll — approximate slope in the local forward/right axes
-    // and apply it to the tilt group (inside the heading rotation) so it
-    // reads as terrain adaptation rather than world-axis wobble.
+    // Astronauts on the moon stand UPRIGHT in world space — no
+    // terrain-normal tilt. The old slope-following code (sampleSlope
+    // -> tilt.rotation.x/z) leaned the body into the local surface
+    // normal, which read as "drunk on a slope" and made the character
+    // look like they were sharing the ground plane's rotation with
+    // the Cybertruck (Frank flagged both entities tilting the same
+    // way on a rise). Force x/z to 0; only yaw (heading) rotates.
     const tilt = astronautRef.current?.tilt;
     if (tilt) {
-      const { dx, dz } = sampleSlope(
-        astronaut.position.x,
-        astronaut.position.z,
-        0.5,
-      );
-      const forwardWorldX = Math.sin(heading.current);
-      const forwardWorldZ = Math.cos(heading.current);
-      const slopeForward = dx * forwardWorldX + dz * forwardWorldZ;
-      const slopeRight = dx * forwardWorldZ - dz * forwardWorldX;
-      const targetPitch = THREE.MathUtils.clamp(-slopeForward, -MAX_PITCH, MAX_PITCH);
-      const targetRoll = THREE.MathUtils.clamp(-slopeRight * 0.5, -MAX_PITCH, MAX_PITCH);
-      tilt.rotation.x += (targetPitch - tilt.rotation.x) * PITCH_LERP;
-      tilt.rotation.z += (targetRoll - tilt.rotation.z) * PITCH_LERP;
+      tilt.rotation.x = 0;
+      tilt.rotation.z = 0;
     }
 
     // Proximity check for waypoints.
