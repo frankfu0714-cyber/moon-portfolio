@@ -74,13 +74,12 @@ const WIDTH_MULT = 0.75;
 
 // Hover tuning
 // Chassis bottom rides this many world units above the sampled terrain.
-// 3.0 puts the sill at roughly 1.7× astronaut height (astronaut is
-// 1.75 tall) — a clearly-hovering gap that photographs as "obviously
-// floating" from any distance, not "close to the ground".
-// NOTE: measured against the VISIBLE chassis min-Y (groundOffset
-// filters out hidden wheel meshes so this constant means what it
-// says — see groundOffset useEffect below).
-const HOVER_HEIGHT = 3.0;
+// 1.3 lands the sill at roughly astronaut-waist/chest height — the
+// Goldilocks zone between "close to the ground" (previous 0.5–1.9
+// runs) and "way up at head height" (the 3.0 overcorrection). Now
+// that groundOffset filters out hidden wheel meshes (see below), this
+// constant literally means "visible sill above terrain".
+const HOVER_HEIGHT = 1.3;
 // Emitter positions come from the GLB's original wheel nodes (see
 // modelInfo.jetPositions). Real wheels sit at the outer edges of the
 // body — fine for wheels, but the hover thrusters read as too wide
