@@ -74,10 +74,11 @@ const WIDTH_MULT = 0.75;
 
 // Hover tuning
 // Chassis bottom rides this many world units above the sampled terrain.
-// 1.4 lands the sill around astronaut-chest height and leaves headroom
-// for the long flame trails plus a safety margin so fast driving over
-// sharp terrain features can't clip the visible mesh into the body.
-const HOVER_HEIGHT = 1.4;
+// 1.9 lands the sill above astronaut-chest height — clearly hovering,
+// with plenty of vertical space for the long flame plumes to reach
+// down toward the ground. Frank's ask after several bumps: firmly
+// higher, no more "still too low".
+const HOVER_HEIGHT = 1.9;
 // Emitter positions come from the GLB's original wheel nodes (see
 // modelInfo.jetPositions). Real wheels sit at the outer edges of the
 // body — fine for wheels, but the hover thrusters read as too wide
@@ -93,11 +94,12 @@ const BOB_AMP = 0.06;
 const BOB_PERIOD = 1.5;
 // Vertical stretch applied to the HoverJet flame stack — cones and
 // particles both elongate downward so the jets read as real thrusters
-// spraying, not short blobs. Bumped to 4.5 to match the higher
-// HOVER_HEIGHT so the plumes still reach toward the ground plane
-// with visible tail instead of ending in mid-air. Terrain occludes
-// anything past the ground so the visible portion stays bright.
-const JET_STRETCH_Y = 4.5;
+// spraying. Bumped to 7.0 to match the higher HOVER_HEIGHT: the
+// plume bottoms now reach close to the terrain so there's a visible
+// column of fire from the emitter down to the ground. Terrain
+// occludes anything past the ground so the visible portion stays
+// bright and the tail cleanly fades into the regolith.
+const JET_STRETCH_Y = 7.0;
 
 // Drive tuning — floatier than the ground version.
 const BASE_SPEED = 5.0;
