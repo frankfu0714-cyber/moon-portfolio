@@ -38,23 +38,26 @@ export const vehicleState = {
   heading: CYBERTRUCK_START_ROT_Y,
 };
 
-// Target world length + height. Length matches the reference photo's
-// long-low stance; height matches the astronaut (see Astronaut.tsx:
-// 1.80 * 0.97 ≈ 1.75 world units) so the driver appears sized to the
-// vehicle.
-const TARGET_LENGTH = 7.8;
-const TARGET_HEIGHT = 1.75;
-// Width axis is scaled off length so the truck stays proportionally
-// wider as it grows longer, but this multiplier lets us pull it in
-// independently: the source GLB is proportionally too wide vs the
-// reference, and Frank wants a narrower truck from behind.
-const WIDTH_MULT = 0.78;
-// Wheel-well gap: raise the sill this many world units above the
-// wheel contact so the tires read as tires, not as body-flush trim.
-// Implemented by dropping the wheel meshes in the model's local
-// space; the ground-offset useEffect then lifts the whole group so
-// the (now-lower) wheels land back on the sampled terrain, netting a
-// body that sits CLEARANCE_LIFT above where it used to.
+// Target world dimensions calibrated to Frank's reference photo:
+// person (~1.80m) standing beside a Cybertruck, roof at chin height,
+// beltline at shoulder, ~20% of the truck's height visible as wheel
+// clearance below the sill.
+//
+// Astronaut is ~1.75 world units (Astronaut.tsx: 1.80 * 0.97). Roof
+// at ~0.92 * astronaut = 1.61 units. Length pulled in to 6.8 to match
+// the "person occupies 1/4 of the truck" reference framing. Width
+// pulled to 0.75 of the uniform-length scale so the truck is properly
+// narrow from behind. Clearance lift 0.4 world units ≈ 25% of total
+// height — the visible wheel gap the reference has.
+//
+// The GLB is monolithic on the vertical axis (single Cube mesh covers
+// body + cabin + tailgate — see mesh dump earlier: Cube, 2 Cylinders,
+// 4 Spheres for wheels). Can't independently shorten just the cabin
+// without vertex editing, so we hit the total-height + clearance
+// numbers and accept the cabin ratio the model bakes in.
+const TARGET_LENGTH = 6.8;
+const TARGET_HEIGHT = 1.61;
+const WIDTH_MULT = 0.75;
 const CLEARANCE_LIFT = 0.4;
 
 // Drive tuning
@@ -100,20 +103,32 @@ export function Cybertruck() {
   const modelInfo = useMemo(() => {
     // Clone the loaded scene: drei's useGLTF returns a shared cached
     // Object3D that survives HMR and remounts, so any mutation we make
-    // (shadows, wheel drop) would otherwise compound across renders.
-    // A one-time deep clone gives us a private copy that's safe to
-    // mutate and safe to re-measure.
+    // (shadows, wheel drop, rotation) would otherwise compound across
+    // renders. A one-time deep clone gives us a private copy that's
+    // safe to mutate and safe to re-measure.
     const scene = gltf.scene.clone(true);
+    // The GLB's nose points at world -Z when heading = 0, but the
+    // drive controller pushes the truck along +Z at heading = 0. Flip
+    // the scene 180° around Y so W drives the nose forward, not the
+    // tailgate.
+    scene.rotation.y = Math.PI;
+    // Collect wheel NODES (not the mesh primitives inside them).
+    // three.js splits the GLB Sphere.001..004 nodes into multiple mesh
+    // primitives (Sphere001_1, Sphere001_2, ...) — those meshes have
+    // identity local transforms but live INSIDE the wheel node whose
+    // scale is (-3.49, -17.55, -17.55). Mutating a mesh primitive's
+    // position gets amplified by that node scale (a 1-unit drop on
+    // the primitive becomes ~17 units in world before outer scaling).
+    // Mutating on the NODE stays in the RootNode's identity frame, so
+    // 1 local unit = 1 world unit before the outer group's scale.
     const wheels: THREE.Object3D[] = [];
     scene.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        return;
       }
-      // The GLB names its wheel meshes Sphere.001..004; grab them so
-      // we can spin them while driving AND drop them in local space
-      // for the ground-clearance lift below.
       if (o.name.startsWith("Sphere")) wheels.push(o);
     });
     scene.updateMatrixWorld(true);
