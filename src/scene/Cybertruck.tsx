@@ -54,7 +54,11 @@ const WIDTH_MULT = 0.75;
 // 1.75 tall, so 0.5 / 1.75 ≈ 29%) — plenty of visible clearance for
 // the flame trails without floating up around the knees / hips.
 const HOVER_HEIGHT = 0.5;
-const BOB_AMP = 0.15;
+// Bob amp 0.15 -> 0.06 per Frank's ask — the up/down range was too
+// big and made the parked truck read as bobbing on rough water
+// instead of just breathing in place. Period unchanged so the rhythm
+// still feels the same, just a smaller vertical excursion.
+const BOB_AMP = 0.06;
 const BOB_PERIOD = 1.5;
 // Vertical stretch applied to the HoverJet flame stack — cones and
 // particles both elongate downward so the jets read as real thrusters
