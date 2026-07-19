@@ -10,8 +10,14 @@ const WALKABLE_R = 45;
 // Radius of the fake planet-curvature: beyond the walkable area the ground
 // falls away quadratically (drop = d^2 / 2R) so the horizon reads as the
 // limb of a sphere instead of the edge of a flat disc.
+//
+// Radius bumped 4x (280 -> 1120) so the walkable area feels effectively
+// flat. Old 280 produced a ~11m ground-drop at WALK_BOUND=120, which made
+// upright entities read as leaning against the curve; the new 1120 gives
+// ~2.86m at WALK_BOUND and ~0.18m within the 60-unit spawn zone. The
+// visible moon-body sphere in MoonSurface.tsx is scaled to match.
 const CURVE_START = 40;
-const CURVE_RADIUS = 280;
+const CURVE_RADIUS = 1120;
 
 function hash(x: number, y: number) {
   const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
