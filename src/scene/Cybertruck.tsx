@@ -50,10 +50,12 @@ const WIDTH_MULT = 0.75;
 
 // Hover tuning
 // Chassis bottom rides this many world units above the sampled terrain.
-// 0.5 lands the sill at roughly astronaut-shin height (astronaut is
-// 1.75 tall, so 0.5 / 1.75 ≈ 29%) — plenty of visible clearance for
-// the flame trails without floating up around the knees / hips.
-const HOVER_HEIGHT = 0.5;
+// 0.7 lands the sill just above astronaut-knee height (astronaut is
+// 1.75 tall, so 0.7 / 1.75 = 40%) — clearly floating, with enough
+// vertical space for the flame plumes to fall onto the ground
+// beneath. 0.5 read as "resting on the ground"; anything above ~0.85
+// pushes the sill into chest/hip territory again.
+const HOVER_HEIGHT = 0.7;
 // Bob amp 0.15 -> 0.06 per Frank's ask — the up/down range was too
 // big and made the parked truck read as bobbing on rough water
 // instead of just breathing in place. Period unchanged so the rhythm
@@ -106,6 +108,10 @@ export function Cybertruck() {
   const groupRef = useRef<THREE.Group>(null);
   const chassisRef = useRef<THREE.Group>(null);
   const jetGroupRef = useRef<THREE.Group>(null);
+  // One ground-decal mesh per jet emitter — bright cyan disc pooled
+  // on the terrain directly beneath its flame. Populated by the
+  // per-jet <mesh ref={...}> callback below.
+  const groundDecalsRef = useRef<(THREE.Mesh | null)[]>([]);
   const { camera } = useThree();
 
   // Live truck state
@@ -351,6 +357,30 @@ export function Cybertruck() {
       speedFrac,
     );
 
+    // Ground decals: 4 flat circles on the terrain, one directly
+    // below each jet emitter. Sample terrain PER decal (not just the
+    // truck center) so on sloped ground each circle hugs its own
+    // local surface height instead of floating. Opacity tracks jet
+    // intensity so the pool pulses with the thrusters.
+    const cosHd = Math.cos(heading.current);
+    const sinHd = Math.sin(heading.current);
+    const wrapperWorldY = pos.current.y - groundOffset.current;
+    for (let i = 0; i < modelInfo.jetPositions.length; i++) {
+      const decal = groundDecalsRef.current[i];
+      if (!decal) continue;
+      const [jx, jz] = modelInfo.jetPositions[i];
+      // Convert jet's local (jx, jz) to world through the outer
+      // group's heading rotation.
+      const worldX = pos.current.x + jx * cosHd + jz * sinHd;
+      const worldZ = pos.current.z - jx * sinHd + jz * cosHd;
+      const terrainY = sampleTerrainHeight(worldX, worldZ);
+      // Decal is a child of the jet wrapper whose world Y equals
+      // wrapperWorldY. Local Y needed to land world Y = terrain + 0.02.
+      decal.position.y = terrainY + 0.02 - wrapperWorldY;
+      const mat = decal.material as THREE.MeshBasicMaterial;
+      mat.opacity = jetIntensityRef.current * 0.85;
+    }
+
     if (driving) {
       const cosH = Math.cos(heading.current);
       const sinH = Math.sin(heading.current);
@@ -456,10 +486,36 @@ export function Cybertruck() {
                 // up as a bright cyan-blue light source). Matches the
                 // astronaut boot-jet look, just larger for the truck.
                 coreScale={1.9}
-                // Only the front-left jet carries the shared pointLight.
-                // Four stacked lights washed the underside white.
-                pointLight={i === 0}
+                // Every jet gets its own pointLight so all four
+                // nozzles light the terrain equally — not just the
+                // front-left. Dialed to ~0.3 of the astronaut-boot
+                // brightness; four combined roughly match a single
+                // bright light without white-washing the underside.
+                pointLight
+                lightScale={0.3}
               />
+              {/* Bright ground-circle "spill" directly below the
+                  emitter. Additive blue disc on the terrain — Bloom
+                  picks it up so the pool looks emissive. Y updated
+                  per frame from sampleTerrainHeight so the disc
+                  hugs the ground even on slopes. */}
+              <mesh
+                ref={(m) => {
+                  groundDecalsRef.current[i] = m;
+                }}
+                rotation={[-Math.PI / 2, 0, 0]}
+              >
+                <circleGeometry args={[0.95, 32]} />
+                <meshBasicMaterial
+                  color="#7ec8ff"
+                  transparent
+                  opacity={0}
+                  depthWrite={false}
+                  toneMapped={false}
+                  blending={THREE.AdditiveBlending}
+                  fog={false}
+                />
+              </mesh>
             </group>
           ))}
         </group>
