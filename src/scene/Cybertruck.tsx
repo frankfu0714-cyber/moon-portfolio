@@ -79,10 +79,19 @@ const WIDTH_MULT = 0.75;
 // the "sometimes touches ground" pattern: on rolling terrain a ridge
 // under a rear wheel would poke up through the chassis while the
 // center sampled clear.
-// 1.2 sits the sill just above astronaut-waist height — clearly
-// hovering but subtler than the 1.5 pass Frank called too high. The
-// max-terrain sampling keeps this safe against triangle peaks.
-const HOVER_HEIGHT = 1.2;
+// 0.9 sits the sill at astronaut-waist height — down from the 1.2
+// "chest" pass that Frank flagged as still too high. Max-terrain
+// sampling keeps this safe against triangle peaks.
+const HOVER_HEIGHT = 0.9;
+// The emitter jet group sits BELOW the chassis origin by this
+// fraction of the model's total min-Y extent. Using the full extent
+// (1.0) put emitters at the extreme lowest visible pixel — often a
+// wheel-well corner or trim protrusion, well below the main
+// underbelly — creating a visible gap between the truck body and
+// the top of the flame column. 0.55 raises the emitters closer to
+// where the wheel-well underbelly actually sits, so the flame's
+// core ball hugs the truck.
+const EMITTER_LIFT_FRAC = 0.55;
 // Emitter positions come from the GLB's original wheel nodes (see
 // modelInfo.jetPositions). Real wheels sit at the outer edges of the
 // body — fine for wheels, but the hover thrusters read as too wide
@@ -513,10 +522,15 @@ export function Cybertruck() {
     vehicleState.z = pos.current.z;
     vehicleState.heading = heading.current;
 
-    // Repark the jet group at the chassis sill (world Y = chassis
-    // bottom); in the chassis group's local frame that's Y = -groundOffset.
+    // Repark the jet group just below the truck's underbelly. Using
+    // the full -groundOffset put emitters at the extreme lowest
+    // visible pixel of the whole model (a wheel-well corner or trim
+    // protrusion), leaving a visible gap between the main underbelly
+    // and the top of the flame column. Lifting by EMITTER_LIFT_FRAC
+    // parks the emitters close to where the wheel-well underbelly
+    // actually sits, so the core ball hugs the chassis body.
     if (jetGroupRef.current) {
-      jetGroupRef.current.position.y = -groundOffset.current;
+      jetGroupRef.current.position.y = -groundOffset.current * EMITTER_LIFT_FRAC;
     }
 
     // Sample slope at each of the 4 wheel contact points in world
