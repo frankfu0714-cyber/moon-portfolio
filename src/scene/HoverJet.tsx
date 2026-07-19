@@ -29,6 +29,11 @@ type Props = {
   // Optional cluster-level point light (recommended: enable only on
   // ONE of the jets in a cluster so we don't stack overlapping lights).
   pointLight?: boolean;
+  // Non-uniform vertical stretch for the flame stack — cones, glow
+  // sprite, AND particle trails elongate together so the whole jet
+  // reads as a longer thruster streak. Default 1 (astronaut boot
+  // aesthetic); the hover Cybertruck uses ~2.5 for a real thruster feel.
+  stretchY?: number;
 };
 
 // Soft round blue-white glow — matches Astronaut.tsx.
@@ -59,7 +64,7 @@ function getGlowTex() {
 }
 
 export const HoverJet = forwardRef<HoverJetHandle, Props>(function HoverJet(
-  { intensityRef, pointLight = false },
+  { intensityRef, pointLight = false, stretchY = 1 },
   ref,
 ) {
   const groupRef = useRef<THREE.Group>(null);
@@ -161,63 +166,69 @@ export const HoverJet = forwardRef<HoverJetHandle, Props>(function HoverJet(
 
   return (
     <group ref={groupRef} visible={false}>
-      {/* Outer soft-blue cone */}
-      <mesh ref={registerCone} position={[0, -0.26, 0]} rotation={[Math.PI, 0, 0]}>
-        <coneGeometry args={[0.075, 0.52, 12, 1, true]} />
-        <meshBasicMaterial
-          ref={registerMat}
-          color="#bfe4ff"
-          transparent
-          opacity={0}
-          depthWrite={false}
-          toneMapped={false}
-          blending={THREE.AdditiveBlending}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      {/* Inner white core */}
-      <mesh ref={registerCone} position={[0, -0.18, 0]} rotation={[Math.PI, 0, 0]}>
-        <coneGeometry args={[0.038, 0.3, 10, 1, true]} />
-        <meshBasicMaterial
-          ref={registerMat}
-          color="#ffffff"
-          transparent
-          opacity={0}
-          depthWrite={false}
-          toneMapped={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
-      {/* Nozzle glow */}
-      <sprite position={[0, -0.01, 0]} scale={[0.88, 0.88, 1]}>
-        <spriteMaterial
-          ref={registerSpriteMat}
-          map={glowTex}
-          transparent
-          depthWrite={false}
-          toneMapped={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </sprite>
-      {/* Trailing exhaust particles */}
-      {Array.from({ length: 7 }, (_, pi) => (
-        <sprite
-          key={pi}
-          ref={(sp) => registerParticle(sp, pi)}
-          position={[0, -0.2, 0]}
-          scale={[0.14, 0.14, 1]}
-        >
-          <spriteMaterial
-            map={glowTex}
-            color="#8fd4ff"
+      {/* stretchY inner wrapper stretches the whole flame stack
+          vertically without stretching the outer group's intensity
+          scale animation. Sprites and cones alike elongate downward,
+          which reads as a longer thruster streak. */}
+      <group scale={[1, stretchY, 1]}>
+        {/* Outer soft-blue cone */}
+        <mesh ref={registerCone} position={[0, -0.26, 0]} rotation={[Math.PI, 0, 0]}>
+          <coneGeometry args={[0.075, 0.52, 12, 1, true]} />
+          <meshBasicMaterial
+            ref={registerMat}
+            color="#bfe4ff"
+            transparent
+            opacity={0}
+            depthWrite={false}
+            toneMapped={false}
+            blending={THREE.AdditiveBlending}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        {/* Inner white core */}
+        <mesh ref={registerCone} position={[0, -0.18, 0]} rotation={[Math.PI, 0, 0]}>
+          <coneGeometry args={[0.038, 0.3, 10, 1, true]} />
+          <meshBasicMaterial
+            ref={registerMat}
+            color="#ffffff"
             transparent
             opacity={0}
             depthWrite={false}
             toneMapped={false}
             blending={THREE.AdditiveBlending}
           />
+        </mesh>
+        {/* Nozzle glow */}
+        <sprite position={[0, -0.01, 0]} scale={[0.88, 0.88, 1]}>
+          <spriteMaterial
+            ref={registerSpriteMat}
+            map={glowTex}
+            transparent
+            depthWrite={false}
+            toneMapped={false}
+            blending={THREE.AdditiveBlending}
+          />
         </sprite>
-      ))}
+        {/* Trailing exhaust particles */}
+        {Array.from({ length: 7 }, (_, pi) => (
+          <sprite
+            key={pi}
+            ref={(sp) => registerParticle(sp, pi)}
+            position={[0, -0.2, 0]}
+            scale={[0.14, 0.14, 1]}
+          >
+            <spriteMaterial
+              map={glowTex}
+              color="#8fd4ff"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              toneMapped={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </sprite>
+        ))}
+      </group>
       {pointLight && (
         <pointLight
           ref={lightRef}
