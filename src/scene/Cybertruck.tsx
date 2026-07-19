@@ -14,7 +14,10 @@ import { useSceneStore } from "@/lib/store";
 // GLB has zero embedded textures - materials are all solid colors,
 // so no trademark wordmark or Tesla logo is baked in.
 
-const CYBERTRUCK_URL = "/models/cybertruck.glb";
+// Cache-buster: bump this integer any time the loader-side mutations
+// (wheel drop, shadow flags) get changed so the useGLTF module-level
+// cache doesn't hand back a stale, mutated copy that survives HMR.
+const CYBERTRUCK_URL = "/models/cybertruck.glb?v=2";
 useGLTF.preload(CYBERTRUCK_URL);
 
 // Starting placement + rotation. Once driving, these are just the
@@ -38,10 +41,21 @@ export const vehicleState = {
 // Target world length + height. Length matches the reference photo's
 // long-low stance; height matches the astronaut (see Astronaut.tsx:
 // 1.80 * 0.97 ≈ 1.75 world units) so the driver appears sized to the
-// vehicle. Ratio comes out ~3.83:1, close to the real 3:1 spec once
-// you account for the tall canopy on this low-poly GLB.
+// vehicle.
 const TARGET_LENGTH = 7.8;
 const TARGET_HEIGHT = 1.75;
+// Width axis is scaled off length so the truck stays proportionally
+// wider as it grows longer, but this multiplier lets us pull it in
+// independently: the source GLB is proportionally too wide vs the
+// reference, and Frank wants a narrower truck from behind.
+const WIDTH_MULT = 0.78;
+// Wheel-well gap: raise the sill this many world units above the
+// wheel contact so the tires read as tires, not as body-flush trim.
+// Implemented by dropping the wheel meshes in the model's local
+// space; the ground-offset useEffect then lifts the whole group so
+// the (now-lower) wheels land back on the sampled terrain, netting a
+// body that sits CLEARANCE_LIFT above where it used to.
+const CLEARANCE_LIFT = 0.4;
 
 // Drive tuning
 const BASE_SPEED = 4.5;
@@ -77,32 +91,56 @@ export function Cybertruck() {
   const camInit = useRef(false);
   const tmp = useMemo(() => new THREE.Vector3(), []);
 
-  // Model prep: shadows + fit-to-target Vector3 scale + grab wheel refs.
-  // FBX2glTF gave the model unusual per-node scales, so a native
-  // bounding-box measure + per-axis scaling is the reliable way to
-  // both hit the target dimensions and keep the reference proportions.
+  // Model prep: shadows + per-axis fit-to-target scale + grab wheel refs.
+  // Length axis (whichever of X/Z is longer natively) scales off
+  // TARGET_LENGTH; the OTHER horizontal axis scales off length too but
+  // gets multiplied by WIDTH_MULT so we can pull the truck in from
+  // behind without shortening it. Y scales off TARGET_HEIGHT
+  // independently so the astronaut-matched height stays locked.
   const modelInfo = useMemo(() => {
+    // Clone the loaded scene: drei's useGLTF returns a shared cached
+    // Object3D that survives HMR and remounts, so any mutation we make
+    // (shadows, wheel drop) would otherwise compound across renders.
+    // A one-time deep clone gives us a private copy that's safe to
+    // mutate and safe to re-measure.
+    const scene = gltf.scene.clone(true);
     const wheels: THREE.Object3D[] = [];
-    gltf.scene.traverse((o) => {
+    scene.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
       }
-      // The GLB names its wheel meshes Sphere.001..004; grab them so we
-      // can spin them while driving.
+      // The GLB names its wheel meshes Sphere.001..004; grab them so
+      // we can spin them while driving AND drop them in local space
+      // for the ground-clearance lift below.
       if (o.name.startsWith("Sphere")) wheels.push(o);
     });
-    const box = new THREE.Box3().setFromObject(gltf.scene);
+    scene.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(scene);
     const size = box.getSize(new THREE.Vector3());
     const nativeLength = Math.max(size.x, size.z);
     if (!nativeLength || !Number.isFinite(nativeLength)) {
-      return { scale: [1, 1, 1] as [number, number, number], wheels };
+      return { scene, scale: [1, 1, 1] as [number, number, number], wheels };
     }
-    const xz = TARGET_LENGTH / nativeLength;
-    const y = size.y > 1e-4 ? TARGET_HEIGHT / size.y : xz;
-    return { scale: [xz, y, xz] as [number, number, number], wheels };
+    const lengthScale = TARGET_LENGTH / nativeLength;
+    const widthScale = lengthScale * WIDTH_MULT;
+    const yScale = size.y > 1e-4 ? TARGET_HEIGHT / size.y : lengthScale;
+    const lengthIsX = size.x >= size.z;
+    const scale: [number, number, number] = lengthIsX
+      ? [lengthScale, yScale, widthScale]
+      : [widthScale, yScale, lengthScale];
+    // Drop wheels DOWN in the model's local Y so the sill rises above
+    // the wheel contact when the group is later lifted to land wheels
+    // on terrain. Convert CLEARANCE_LIFT (world units) to local via
+    // yScale so we get exactly the requested world-space rise.
+    const wheelLocalDrop = yScale > 1e-4 ? CLEARANCE_LIFT / yScale : 0;
+    for (const w of wheels) {
+      w.position.y -= wheelLocalDrop;
+    }
+    return { scene, scale, wheels };
   }, [gltf.scene]);
+
 
   // Ground offset: after scaling, measure how far the model's bounding
   // box extends below the group origin so we can lift the group and
@@ -241,7 +279,7 @@ export function Cybertruck() {
 
   return (
     <group ref={groupRef} scale={modelInfo.scale}>
-      <primitive object={gltf.scene} />
+      <primitive object={modelInfo.scene} />
     </group>
   );
 }
