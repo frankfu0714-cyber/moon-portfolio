@@ -381,6 +381,27 @@ export function Cybertruck() {
     } else {
       camInit.current = false;
     }
+
+    // Belt + suspenders: unconditionally re-clamp X/Z rotation on
+    // every group we own AT THE VERY END of useFrame — after physics,
+    // after collision, after camera, after any other write path — so
+    // no future code can accidentally leave a tilt in the transform.
+    // Frank kept seeing the truck pitched/rolled after fence collisions
+    // even with the earlier clamp higher in the frame; this final pass
+    // makes the guarantee absolute.
+    g.rotation.x = 0;
+    g.rotation.z = 0;
+    c.rotation.x = 0;
+    c.rotation.z = 0;
+    // Also clamp the loaded GLB's own scene node. It gets a static
+    // rotation.y = PI in useMemo; any external mutation of its X/Z
+    // would tilt the entire visible body inside the chassis group.
+    modelInfo.scene.rotation.x = 0;
+    modelInfo.scene.rotation.z = 0;
+    if (jetGroupRef.current) {
+      jetGroupRef.current.rotation.x = 0;
+      jetGroupRef.current.rotation.z = 0;
+    }
   });
 
   return (
