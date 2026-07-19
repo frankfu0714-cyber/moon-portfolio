@@ -50,9 +50,10 @@ const WIDTH_MULT = 0.75;
 
 // Hover tuning
 // Chassis bottom rides this many world units above the sampled terrain.
-// 0.65 = just enough visible clearance for the flame trails to show;
-// tighter than the old 1.2 which read as "levitating a bit too high".
-const HOVER_HEIGHT = 0.65;
+// 0.5 lands the sill at roughly astronaut-shin height (astronaut is
+// 1.75 tall, so 0.5 / 1.75 ≈ 29%) — plenty of visible clearance for
+// the flame trails without floating up around the knees / hips.
+const HOVER_HEIGHT = 0.5;
 const BOB_AMP = 0.15;
 const BOB_PERIOD = 1.5;
 // Vertical stretch applied to the HoverJet flame stack — cones and
@@ -194,7 +195,18 @@ export function Cybertruck() {
     const c = chassisRef.current;
     if (!c) return;
     c.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(c);
+    // CRITICAL: measure ONLY the scaled-model child, NOT the whole
+    // chassis group. The chassis also holds the jet group whose flame
+    // cones extend well below the chassis body (up to stretchY * 0.55
+    // ≈ 1.4 units past the emitter). Measuring the whole group made
+    // groundOffset inflate by that amount, which then lifted the
+    // entire truck by the same amount — the reason Frank kept seeing
+    // the sill floating at chest/shoulder height instead of at knee.
+    // We want the body-bottom-to-terrain distance to be HOVER_HEIGHT,
+    // not the (body-bottom - flame-tip)-to-terrain distance.
+    const scaledModel = c.children.find((child) => child !== jetGroupRef.current);
+    if (!scaledModel) return;
+    const box = new THREE.Box3().setFromObject(scaledModel);
     groundOffset.current = -box.min.y;
   }, [modelInfo]);
 
