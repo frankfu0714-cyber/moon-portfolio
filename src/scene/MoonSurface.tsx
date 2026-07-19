@@ -117,9 +117,12 @@ export function MoonSurface() {
       </mesh>
       {/* The visible body of the moon: a huge sphere tucked just under the
           curved terrain cap so the horizon shows a round limb in every
-          direction — the disc edge can never silhouette against space. */}
-      <mesh position={[0, -322, 0]}>
-        <sphereGeometry args={[320, 96, 48]} />
+          direction — the disc edge can never silhouette against space.
+          Scaled 4x with CURVE_RADIUS (see terrain.ts) so the walkable
+          area reads as effectively flat. Sphere top still sits at Y=-2
+          (just under spawn) — R = 1280 with center Y = -1282. */}
+      <mesh position={[0, -1282, 0]}>
+        <sphereGeometry args={[1280, 96, 48]} />
         <meshStandardMaterial color="#b9b6ae" roughness={1} metalness={0} />
       </mesh>
       <SafeAsset label="moon-texture">
