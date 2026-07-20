@@ -31,6 +31,8 @@ const _normalLocal = new THREE.Vector3();
 const _tiltQuat = new THREE.Quaternion();
 const _blendedTilt = new THREE.Quaternion();
 const _identityQuat = new THREE.Quaternion();
+const _tiltMatrix = new THREE.Matrix4();
+const _tiltedBounds = new THREE.Box3();
 
 // Tesla-Cybertruck-style low-poly GLB by Mobolaji, sourced from
 // Poly Pizza (CC-BY 3.0). Bundled at /public/models/cybertruck.glb.
@@ -174,6 +176,10 @@ export function Cybertruck() {
   const orbitPitch = useRef(CAM_DEFAULT_PITCH);
   const orbitDist = useRef(CAM_DEFAULT_DIST);
   const dragging = useRef(false);
+  // Visible chassis bounds in chassisRef-local space. Keeping these
+  // local makes the clearance measurement independent of whichever
+  // position/tilt happened to be active when the effect ran.
+  const chassisBounds = useRef(new THREE.Box3());
 
   const modelInfo = useMemo(() => {
     const scene = gltf.scene.clone(true);
@@ -245,8 +251,9 @@ export function Cybertruck() {
   }, [gltf.scene]);
 
   // Ground offset: measure how far the VISIBLE chassis body extends
-  // below the chassis group origin. Used with HOVER_HEIGHT to place
-  // the chassis a fixed distance above the sampled terrain.
+  // below the chassis group origin. Bounds are converted into
+  // chassis-local space so load timing, world position, and the
+  // current slope tilt cannot contaminate the measurement.
   //
   // Two gotchas we defend against here (both bit us before):
   //   1. Don't measure the jet group — its stretched flame cones
@@ -268,6 +275,8 @@ export function Cybertruck() {
     if (!scaledModel) return;
     const box = new THREE.Box3();
     const tmpBox = new THREE.Box3();
+    const chassisWorldInverse = c.matrixWorld.clone().invert();
+    const meshToChassis = new THREE.Matrix4();
     scaledModel.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -278,10 +287,14 @@ export function Cybertruck() {
         if (cursor.visible === false) return;
         cursor = cursor.parent;
       }
-      tmpBox.setFromObject(mesh);
+      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+      if (!mesh.geometry.boundingBox) return;
+      meshToChassis.multiplyMatrices(chassisWorldInverse, mesh.matrixWorld);
+      tmpBox.copy(mesh.geometry.boundingBox).applyMatrix4(meshToChassis);
       box.union(tmpBox);
     });
     if (!isFinite(box.min.y)) return;
+    chassisBounds.current.copy(box);
     groundOffset.current = -box.min.y;
   }, [modelInfo]);
 
@@ -472,18 +485,6 @@ export function Cybertruck() {
     }
     const time = state.clock.elapsedTime;
     const bob = Math.sin((time / BOB_PERIOD) * Math.PI * 2) * BOB_AMP;
-    pos.current.y = groundY + HOVER_HEIGHT + groundOffset.current + bob;
-
-    // Outer group carries position + yaw ONLY. The chassis child gets
-    // the slope-aligned tilt (below). Decal group sits alongside the
-    // chassis under the outer group so decals inherit position + yaw
-    // but never the tilt — they must lie flat on the terrain.
-    g.position.copy(pos.current);
-    g.rotation.set(0, heading.current, 0);
-
-    vehicleState.x = pos.current.x;
-    vehicleState.z = pos.current.z;
-    vehicleState.heading = heading.current;
 
     // Sample slope at each of the 4 wheel contact points in world
     // space, average the resulting surface normals. Single-center
@@ -530,6 +531,28 @@ export function Cybertruck() {
     // Slerp chassis toward the target so the tilt eases in over
     // ~0.5s instead of snapping when the wheels cross a ridge.
     c.quaternion.slerp(_blendedTilt, TESLA_TILT_SLERP);
+
+    // Tilting around the chassis origin can swing a front/rear corner
+    // lower than the unrotated sill. Recompute the visible bounds for
+    // the current tilt and compensate by exactly that extra drop.
+    // This keeps HOVER_HEIGHT stable even on crater rims and slopes.
+    let tiltAwareGroundOffset = groundOffset.current;
+    if (!chassisBounds.current.isEmpty()) {
+      _tiltMatrix.makeRotationFromQuaternion(c.quaternion);
+      _tiltedBounds.copy(chassisBounds.current).applyMatrix4(_tiltMatrix);
+      tiltAwareGroundOffset = -_tiltedBounds.min.y;
+    }
+    pos.current.y = groundY + HOVER_HEIGHT + tiltAwareGroundOffset + bob;
+
+    // Outer group carries position + yaw ONLY. The chassis child gets
+    // the slope-aligned tilt above. Applying position after the tilt
+    // lets the clearance compensation use the final frame quaternion.
+    g.position.copy(pos.current);
+    g.rotation.set(0, heading.current, 0);
+
+    vehicleState.x = pos.current.x;
+    vehicleState.z = pos.current.z;
+    vehicleState.heading = heading.current;
 
     // Drive the shared jet intensity ref — every HoverJet reads it.
     // Idle baseline so parked jets still glow, ramping with speed.
