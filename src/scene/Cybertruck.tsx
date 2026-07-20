@@ -88,7 +88,7 @@ const WIDTH_MULT = 0.75;
 // the terrain instead of extending 3.5m underground (that long
 // tail was what read as "the truck is at ankle level" — flames
 // reached the ground so the whole silhouette scanned as low).
-const HOVER_HEIGHT = 1.1;
+const HOVER_HEIGHT = 1.2;
 // The emitter jet group sits BELOW the chassis origin by this
 // fraction of the model's total min-Y extent. Using the full extent
 // (1.0) put emitters at the extreme lowest visible pixel — often a
