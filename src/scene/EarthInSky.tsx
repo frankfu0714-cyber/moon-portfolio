@@ -21,10 +21,6 @@ const LIGHTS_MAP_URL =
 
 const EARTH_R = 42;
 
-// The globe's radius in canvas pixels (out of a 512px square). Used
-// by the atmospheric halo sprite behind the mesh.
-const CANVAS_GLOBE_R = 150;
-
 // World-space positions of the Earth and the visible Sun sprite (see
 // Scene.tsx SunInSky). Direction from Earth to Sun drives the day/night
 // shader — using the SPRITE position (not the directional light's
@@ -40,41 +36,6 @@ const CANVAS_GLOBE_R = 150;
 const EARTH_WORLD = new THREE.Vector3(14, 72, 236);
 const SUN_WORLD = new THREE.Vector3(450, 130, -180);
 const SUN_FROM_EARTH = SUN_WORLD.clone().sub(EARTH_WORLD).normalize();
-
-// Painted halo: a smooth radial gradient behind the globe. No fake
-// sun-side crescent any more — the shader draws that per-fragment on
-// the physically correct hemisphere.
-function makeAtmosphereTexture() {
-  const size = 512;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  const c = size / 2;
-
-  // Thin halo — only a sliver past the sphere silhouette. Fades
-  // out over an EXTENDED tail so no visible outer edge/line. The
-  // previous stops died at 0.66 which produced a subtle circular
-  // edge (Frank circled it); this version fades smoothly through
-  // 0.78 so the transition into black space is imperceptible.
-  const atm = ctx.createRadialGradient(c, c, 0, c, c, c);
-  atm.addColorStop(0.0, "rgba(120,170,240,0)");
-  atm.addColorStop(0.55, "rgba(120,170,240,0)");
-  atm.addColorStop(0.575, "rgba(150,195,255,0.22)");
-  atm.addColorStop(0.59, "rgba(140,190,250,0.14)");
-  atm.addColorStop(0.61, "rgba(120,175,235,0.08)");
-  atm.addColorStop(0.64, "rgba(105,160,220,0.04)");
-  atm.addColorStop(0.68, "rgba(95,150,215,0.015)");
-  atm.addColorStop(0.73, "rgba(90,145,210,0.005)");
-  atm.addColorStop(0.78, "rgba(90,140,210,0)");
-  atm.addColorStop(1.0, "rgba(90,140,210,0)");
-  ctx.fillStyle = atm;
-  ctx.fillRect(0, 0, size, size);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
 
 // 1x1 solid textures so the shader has something safe to sample from
 // while the real maps are still loading (or if SafeAsset catches a
@@ -150,16 +111,16 @@ const EARTH_FRAGMENT = /* glsl */ `
     // Subtle Rayleigh-like atmospheric tint on the day side.
     color += vec3(0.06, 0.10, 0.16) * dayness;
 
-    // Fresnel-based atmospheric limb glow: max at grazing view
-    // angles, and GATED by sun-facing. The shadowed limb gets no
-    // rim contribution at all (previous version added a faint haze
-    // that read as an unwanted bright arc on the night limb).
-    // Sharper falloff (pow 3.2) so the arc is a thin crescent on
-    // the sunlit edge, not a fat halo.
-    float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.2);
+    // Fresnel-based atmospheric limb glow: subtle bright arc on the
+    // sunlit edge only. Reduced from the earlier 1.1x multiplier
+    // because we removed the separate halo sprite (which was
+    // creating a visible silhouette line where the sprite quad
+    // ended against space). This rim stays entirely within the
+    // sphere's shader so there's no external geometry edge to see.
+    float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.6);
     float sunAmount = clamp(sunFacing, 0.0, 1.0);
     vec3 atmoSun = vec3(0.55, 0.78, 1.15);
-    color += atmoSun * rim * sunAmount * 1.1;
+    color += atmoSun * rim * sunAmount * 0.55;
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -208,13 +169,6 @@ function EarthTextureApplier({
 export function EarthInSky() {
   const groupRef = useRef<THREE.Group>(null);
   const material = useMemo(() => makeEarthMaterial(), []);
-  const atmosphereTex = useMemo(() => makeAtmosphereTexture(), []);
-
-  // Sprite scale: the canvas globe radius must project to EARTH_R
-  // world units, so full canvas width (256 px half) maps to this many
-  // world units. Keep the halo billboard slightly larger than the
-  // globe so its outer glow fringes past the mesh limb.
-  const spriteSize = EARTH_R * (256 / CANVAS_GLOBE_R) * 2;
 
   useFrame((_, delta) => {
     if (groupRef.current) {
@@ -231,6 +185,11 @@ export function EarthInSky() {
     };
   }, [material]);
 
+  // No halo sprite: the sprite's own quad silhouette was showing
+  // through as a subtle line/edge ring around the sphere even after
+  // gradient softening. Dropping it entirely — the shader's
+  // Fresnel rim on the sphere provides all the atmospheric feel
+  // and has no external geometry, so no silhouette edge to see.
   return (
     <group position={[EARTH_WORLD.x, EARTH_WORLD.y, EARTH_WORLD.z]}>
       <group ref={groupRef} rotation={[0.15, 2.6, 0]}>
@@ -241,19 +200,6 @@ export function EarthInSky() {
       <SafeAsset label="earth-texture">
         <EarthTextureApplier material={material} />
       </SafeAsset>
-      {/* Symmetric atmospheric halo behind the globe — no baked-in
-          crescent any more, since the shader draws the sunlit limb
-          on the physically correct side. This sprite just adds the
-          soft outer haze past the mesh silhouette. */}
-      <sprite position={[0, 0, 8]} scale={[spriteSize, spriteSize, 1]}>
-        <spriteMaterial
-          map={atmosphereTex}
-          transparent
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-          fog={false}
-        />
-      </sprite>
     </group>
   );
 }
