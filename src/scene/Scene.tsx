@@ -7,6 +7,7 @@ import { Environment, PerspectiveCamera, Stars, useGLTF } from "@react-three/dre
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import { AstronautController } from "./AstronautController";
 import { MoonSurface } from "./MoonSurface";
+import { MoonRocks } from "./MoonRocks";
 import { EarthInSky } from "./EarthInSky";
 import { WaypointFlag } from "./WaypointFlag";
 import { MoonBase } from "./MoonBase";
@@ -681,6 +682,7 @@ export function Scene() {
           belt-and-braces defense. */}
       <SafeAsset label="moon">
         <MoonSurface />
+        <MoonRocks />
         <MoonBase />
       </SafeAsset>
       <SafeAsset label="earth">

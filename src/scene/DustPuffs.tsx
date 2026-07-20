@@ -10,16 +10,20 @@ import {
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
-// Capacity — enough for several bursts overlapping at max walk speed
-// (~1.8 Hz cycle × 2 halves × 12 particles × 0.8s lifetime ≈ 35 concurrent).
-const CAPACITY = 224;
-const GRAVITY = 0.22; // lunar dust settles slowly
+// Enough headroom for layered powder + grain bursts while running, landing,
+// and overlapping with hover wash. Still one draw call.
+const CAPACITY = 448;
 
 type Particle = {
   active: boolean;
   age: number;
   life: number;
-  grow: number;
+  startSize: number;
+  endSize: number;
+  opacity: number;
+  gravity: number;
+  drag: number;
+  shade: number;
   x: number;
   y: number;
   z: number;
@@ -29,7 +33,14 @@ type Particle = {
 };
 
 export type DustPuffsHandle = {
-  puff: (x: number, y: number, z: number) => void;
+  puff: (
+    x: number,
+    y: number,
+    z: number,
+    strength?: number,
+    directionX?: number,
+    directionZ?: number,
+  ) => void;
   ambient: (x: number, y: number, z: number) => void;
   landing: (x: number, y: number, z: number, strength: number) => void;
 };
@@ -70,7 +81,12 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
         active: false,
         age: 0,
         life: 1,
-        grow: 1,
+        startSize: 0,
+        endSize: 0,
+        opacity: 0,
+        gravity: 0,
+        drag: 0,
+        shade: 1,
         x: 0,
         y: 0,
         z: 0,
@@ -84,19 +100,21 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
   const positions = useMemo(() => new Float32Array(CAPACITY * 3), []);
   const alphas = useMemo(() => new Float32Array(CAPACITY), []);
   const sizes = useMemo(() => new Float32Array(CAPACITY), []);
+  const colors = useMemo(() => new Float32Array(CAPACITY * 3), []);
 
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     g.setAttribute("aAlpha", new THREE.BufferAttribute(alphas, 1));
     g.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
+    g.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
     g.setDrawRange(0, CAPACITY);
     // Hide inactive particles far below the ground initially.
     for (let i = 0; i < CAPACITY; i++) {
       positions[i * 3 + 1] = -1000;
     }
     return g;
-  }, [positions, alphas, sizes]);
+  }, [positions, alphas, sizes, colors]);
 
   useEffect(() => {
     return () => {
@@ -112,45 +130,64 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
     z: number,
     kind: "step" | "ambient" | "burst",
     strength = 1,
+    directionX = 0,
+    directionZ = 0,
   ) => {
+    const directionLength = Math.hypot(directionX, directionZ);
+    const backX = directionLength > 1e-4 ? -directionX / directionLength : 0;
+    const backZ = directionLength > 1e-4 ? -directionZ / directionLength : 0;
     const count =
       kind === "burst"
-        ? Math.round((20 + Math.random() * 8) * strength)
+        ? Math.round((34 + Math.random() * 12) * strength)
         : kind === "step"
-          ? 10 + Math.floor(Math.random() * 5)
+          ? Math.round((22 + Math.random() * 8) * strength)
           : 1;
     for (let n = 0; n < count; n++) {
       const idx = nextIndex.current;
       const p = particles[idx];
       p.active = true;
       p.age = 0;
+      const finePowder = kind === "ambient" || Math.random() < (kind === "burst" ? 0.72 : 0.64);
       const jitterR = kind === "burst" ? 0.22 : kind === "step" ? 0.14 : 0.08;
       const jTheta = Math.random() * Math.PI * 2;
       p.x = x + Math.cos(jTheta) * jitterR * Math.random();
       p.z = z + Math.sin(jTheta) * jitterR * Math.random();
-      p.y = y + 0.02 + Math.random() * 0.04;
-      const outward =
-        kind === "burst"
-          ? (0.55 + Math.random() * 0.75) * strength
-          : kind === "step"
-            ? 0.28 + Math.random() * 0.5
-            : 0.05;
-      const upward =
-        kind === "burst"
-          ? 0.4 + Math.random() * 0.55
-          : kind === "step"
-            ? 0.3 + Math.random() * 0.45
-            : 0.12;
-      p.vx = Math.cos(jTheta) * outward;
-      p.vz = Math.sin(jTheta) * outward;
-      p.vy = upward;
-      p.life =
-        kind === "burst"
-          ? 1.5 + Math.random() * 0.5
-          : kind === "step"
-            ? 0.9 + Math.random() * 0.35
-            : 1.3;
-      p.grow = kind === "burst" ? 1.5 : kind === "step" ? 1 : 0.7;
+      p.y = y + 0.035 + Math.random() * 0.07;
+      if (finePowder) {
+        const outward =
+          kind === "burst"
+            ? (0.34 + Math.random() * 0.52) * strength
+            : kind === "step"
+              ? (0.13 + Math.random() * 0.34) * strength
+              : 0.025;
+        const backKick = kind === "step" ? (0.12 + Math.random() * 0.3) * strength : 0;
+        p.vx = Math.cos(jTheta) * outward + backX * backKick;
+        p.vz = Math.sin(jTheta) * outward + backZ * backKick;
+        p.vy = kind === "burst" ? 0.15 + Math.random() * 0.32 : kind === "step" ? 0.07 + Math.random() * 0.19 : 0.065;
+        p.life = kind === "burst" ? 1.45 + Math.random() * 0.75 : kind === "step" ? 0.9 + Math.random() * 0.55 : 1.2;
+        p.startSize = kind === "burst" ? 0.085 : 0.045;
+        p.endSize = (kind === "burst" ? 0.56 : kind === "step" ? 0.44 : 0.2) * (0.75 + Math.random() * 0.5);
+        p.opacity = kind === "ambient" ? 0.2 : kind === "burst" ? 0.5 : 0.5;
+        p.gravity = 0.1;
+        p.drag = 1.35;
+        p.shade = 0.76 + Math.random() * 0.16;
+      } else {
+        // Brighter grains follow short lunar ballistic arcs while the powder
+        // stays close to the surface. Their small size prevents a spark look.
+        const outward =
+          (kind === "burst" ? 0.58 + Math.random() * 0.88 : 0.34 + Math.random() * 0.64) * strength;
+        const backKick = kind === "step" ? (0.18 + Math.random() * 0.38) * strength : 0;
+        p.vx = Math.cos(jTheta) * outward + backX * backKick;
+        p.vz = Math.sin(jTheta) * outward + backZ * backKick;
+        p.vy = (kind === "burst" ? 0.4 + Math.random() * 0.62 : 0.24 + Math.random() * 0.46) * strength;
+        p.life = kind === "burst" ? 0.8 + Math.random() * 0.58 : 0.52 + Math.random() * 0.4;
+        p.startSize = 0.012 + Math.random() * 0.014;
+        p.endSize = p.startSize * (1.15 + Math.random() * 0.5);
+        p.opacity = 0.62 + Math.random() * 0.2;
+        p.gravity = 0.72;
+        p.drag = 0.32;
+        p.shade = 0.86 + Math.random() * 0.14;
+      }
       nextIndex.current = (nextIndex.current + 1) % CAPACITY;
     }
   };
@@ -158,8 +195,8 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
   useImperativeHandle(
     ref,
     () => ({
-      puff(x, y, z) {
-        spawn(x, y, z, "step");
+      puff(x, y, z, strength, directionX, directionZ) {
+        spawn(x, y, z, "step", strength, directionX, directionZ);
       },
       ambient(x, y, z) {
         spawn(x, y, z, "ambient");
@@ -191,25 +228,32 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
         positions[i * 3 + 1] = -1000;
         continue;
       }
-      const drag = 1 - t * 0.8;
-      p.x += p.vx * drag * delta;
-      p.z += p.vz * drag * delta;
-      p.y += p.vy * drag * delta;
-      p.vy -= GRAVITY * delta;
+      const damping = Math.exp(-p.drag * delta);
+      p.vx *= damping;
+      p.vz *= damping;
+      p.x += p.vx * delta;
+      p.z += p.vz * delta;
+      p.y += p.vy * delta;
+      p.vy -= p.gravity * delta;
 
       positions[i * 3] = p.x;
       positions[i * 3 + 1] = p.y;
       positions[i * 3 + 2] = p.z;
 
-      const fadeIn = Math.min(t / 0.12, 1);
-      const fadeOut = 1 - Math.max((t - 0.12) / 0.88, 0);
-      alphas[i] = 0.55 * fadeIn * fadeOut * fadeOut;
-      sizes[i] = (0.04 + t * 0.26) * p.grow;
+      const fadeIn = Math.min(t / 0.09, 1);
+      const fadeOut = 1 - Math.max((t - 0.16) / 0.84, 0);
+      alphas[i] = p.opacity * fadeIn * fadeOut * fadeOut;
+      const easedGrow = 1 - Math.pow(1 - t, 2);
+      sizes[i] = THREE.MathUtils.lerp(p.startSize, p.endSize, easedGrow);
+      colors[i * 3] = p.shade * 1.02;
+      colors[i * 3 + 1] = p.shade;
+      colors[i * 3 + 2] = p.shade * 0.94;
     }
 
     geometry.attributes.position.needsUpdate = true;
     geometry.attributes.aAlpha.needsUpdate = true;
     geometry.attributes.aSize.needsUpdate = true;
+    geometry.attributes.aColor.needsUpdate = true;
   });
 
   return (
@@ -223,9 +267,12 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
             vertexShader: /* glsl */ `
               attribute float aAlpha;
               attribute float aSize;
+              attribute vec3 aColor;
               varying float vAlpha;
+              varying vec3 vColor;
               void main() {
                 vAlpha = aAlpha;
+                vColor = aColor;
                 vec4 mv = modelViewMatrix * vec4(position, 1.0);
                 gl_PointSize = aSize * 380.0 / -mv.z;
                 gl_Position = projectionMatrix * mv;
@@ -234,10 +281,11 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
             fragmentShader: /* glsl */ `
               uniform sampler2D uTexture;
               varying float vAlpha;
+              varying vec3 vColor;
               void main() {
                 if (vAlpha <= 0.001) discard;
                 vec4 tex = texture2D(uTexture, gl_PointCoord);
-                gl_FragColor = vec4(tex.rgb, tex.a * vAlpha);
+                gl_FragColor = vec4(tex.rgb * vColor, tex.a * vAlpha);
               }
             `,
             transparent: true,
@@ -249,4 +297,3 @@ export const DustPuffs = forwardRef<DustPuffsHandle>(function DustPuffs(_, ref) 
     </points>
   );
 });
-

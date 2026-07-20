@@ -539,6 +539,9 @@ export function AstronautController() {
         astronaut.position.x,
         targetY - FOOT_OFFSET,
         astronaut.position.z,
+        1.15,
+        velocity.current.x,
+        velocity.current.z,
       );
     }
     if (airborne.current) {
@@ -724,7 +727,14 @@ export function AstronautController() {
   const handleFootstep = (pos: THREE.Vector3) => {
     if (airborne.current) return; // no footfalls mid-air
     if (floatBlend.current > 0.3) return; // no footfalls on thrusters
-    dustRef.current?.puff(pos.x, pos.y - FOOT_OFFSET, pos.z);
+    dustRef.current?.puff(
+      pos.x,
+      pos.y - FOOT_OFFSET,
+      pos.z,
+      0.85 + runBlend.current * 0.7,
+      velocity.current.x,
+      velocity.current.z,
+    );
   };
 
   return (
