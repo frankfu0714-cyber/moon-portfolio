@@ -81,10 +81,10 @@ const WIDTH_MULT = 0.75;
 // the "sometimes touches ground" pattern: on rolling terrain a ridge
 // under a rear wheel would poke up through the chassis while the
 // center sampled clear.
-// 1.1 keeps the hover visibly clear while sitting a little lower.
+// 0.9 keeps the hover visibly clear while sitting lower.
 // The exact wheel coordinates below are also used for terrain
 // sampling, so the clearance follows the truck's real footprint.
-const HOVER_HEIGHT = 1.1;
+const HOVER_HEIGHT = 0.9;
 // Bob amp 0.15 -> 0.06 per Frank's ask — the up/down range was too
 // big and made the parked truck read as bobbing on rough water
 // instead of just breathing in place. Period unchanged so the rhythm
