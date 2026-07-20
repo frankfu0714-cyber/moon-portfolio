@@ -79,11 +79,16 @@ const WIDTH_MULT = 0.75;
 // the "sometimes touches ground" pattern: on rolling terrain a ridge
 // under a rear wheel would poke up through the chassis while the
 // center sampled clear.
-// 1.1 sits the sill at astronaut hip/waist height — Goldilocks
-// after the oscillation history: 1.5 was chest (too high), 1.2 was
-// still too high, 0.9 was too low (nearly touching). Max-terrain
-// sampling keeps this safe against triangle peaks.
-const HOVER_HEIGHT = 1.1;
+// Runtime measurement (visible sill height above terrain) with the
+// astronaut GLB restored to 1.77 units tall:
+//   HOVER=1.1 -> sill at 1.15 (~65% of astronaut = chest)
+//   HOVER=0.9 -> sill at ~0.94 (~53% of astronaut = waist/belt)
+// 0.9 hits Frank's "waist" target directly. Paired with the
+// JET_STRETCH_Y reduction so the visible flame column ends near
+// the terrain instead of extending 3.5m underground (that long
+// tail was what read as "the truck is at ankle level" — flames
+// reached the ground so the whole silhouette scanned as low).
+const HOVER_HEIGHT = 0.9;
 // The emitter jet group sits BELOW the chassis origin by this
 // fraction of the model's total min-Y extent. Using the full extent
 // (1.0) put emitters at the extreme lowest visible pixel — often a
@@ -106,14 +111,14 @@ const EMITTER_INWARD_MULT = 0.75;
 // still feels the same, just a smaller vertical excursion.
 const BOB_AMP = 0.06;
 const BOB_PERIOD = 1.5;
-// Vertical stretch applied to the HoverJet flame stack — cones and
-// particles both elongate downward so the jets read as real thrusters
-// spraying. Bumped to 7.0 to match the higher HOVER_HEIGHT: the
-// plume bottoms now reach close to the terrain so there's a visible
-// column of fire from the emitter down to the ground. Terrain
-// occludes anything past the ground so the visible portion stays
-// bright and the tail cleanly fades into the regolith.
-const JET_STRETCH_Y = 7.0;
+// Vertical stretch on the HoverJet flame stack. Base cone length is
+// 0.52; stretched to 0.52 * 2.0 = 1.04 units, so with HOVER_HEIGHT
+// 0.9 the flame column starts near the underbelly and ends just past
+// the terrain (bottom 0.14 buried, mostly visible). Old 7.0 pushed
+// flames 3.5m into the ground — from a distance the flame BOTTOM
+// (touching terrain) read as the "truck bottom", making the whole
+// silhouette look like it was sitting on the ground.
+const JET_STRETCH_Y = 2.0;
 
 // Drive tuning — floatier than the ground version.
 const BASE_SPEED = 5.0;
