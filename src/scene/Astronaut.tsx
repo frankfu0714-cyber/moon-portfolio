@@ -23,10 +23,11 @@ type Props = {
 
 // Realistic rigged astronaut (Sketchfab, CC-BY 4.0) with baked Mixamo
 // animation clips — real walking this time, not a procedural glide.
-// media.githubusercontent.com sends `access-control-allow-origin: *`,
-// so the cross-origin fetch is safe.
-const MODEL_URL =
-  "https://media.githubusercontent.com/media/BarthPaleologue/CosmosJourneyer/main/packages/game/src/asset/character/astronaut.glb";
+// Bundled locally at /public/models/astronaut.glb. The old external
+// URL (media.githubusercontent.com LFS mirror) started returning 404
+// which hid the astronaut behind SafeAsset; local bundling makes the
+// load deterministic and immune to third-party CDN outages.
+const MODEL_URL = "/models/astronaut.glb";
 
 // Clip names baked into the GLB.
 const CLIP_IDLE = "Standing Idle";
