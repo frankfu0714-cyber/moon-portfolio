@@ -79,19 +79,11 @@ const WIDTH_MULT = 0.75;
 // the "sometimes touches ground" pattern: on rolling terrain a ridge
 // under a rear wheel would poke up through the chassis while the
 // center sampled clear.
-// 1.25 adds a small safety margin over the previous 1.175 tuning.
+// 1.2 keeps a small safety margin over the previous 1.175 tuning
+// without making the chassis look excessively high.
 // The exact wheel coordinates below are also used for terrain
 // sampling, so the clearance follows the truck's real footprint.
-const HOVER_HEIGHT = 1.25;
-// The emitter jet group sits BELOW the chassis origin by this
-// fraction of the model's total min-Y extent. Using the full extent
-// (1.0) put emitters at the extreme lowest visible pixel — often a
-// wheel-well corner or trim protrusion, well below the main
-// underbelly — creating a visible gap between the truck body and
-// the top of the flame column. 0.55 raises the emitters closer to
-// where the wheel-well underbelly actually sits, so the flame's
-// core ball hugs the truck.
-const EMITTER_LIFT_FRAC = 0.55;
+const HOVER_HEIGHT = 1.2;
 // Bob amp 0.15 -> 0.06 per Frank's ask — the up/down range was too
 // big and made the parked truck read as bobbing on rough water
 // instead of just breathing in place. Period unchanged so the rhythm
@@ -137,11 +129,10 @@ const CAM_FLOOR_LIFT = 0.6;
 // Jet layout — one HoverJet at each of the four ORIGINAL wheel-node
 // positions from the GLB (Sphere.001..004). We snapshot the wheel
 // world positions during model prep, before hiding the wheel nodes,
-// then multiply by the chassis scale to get the corresponding
-// positions in chassisRef's local frame. Y is ignored (jets sit at
-// the chassis SILL via jetGroupRef.position.y = -groundOffset).
+// then multiply all three axes by the chassis scale to get the
+// corresponding positions in chassisRef's local frame.
 // This guarantees the flames appear exactly where the tires used to
-// be, no manual X/Z tuning needed if we ever change proportions.
+// be, including vertically inside the open wheel wells.
 
 // Base intensity while parked so the truck reads as HOVERING even
 // when idle (full-off jets would suggest "landed").
@@ -228,7 +219,7 @@ export function Cybertruck() {
       return {
         scene,
         scale: [1, 1, 1] as [number, number, number],
-        jetPositions: [] as [number, number][],
+        jetPositions: [] as [number, number, number][],
       };
     }
     const lengthScale = TARGET_LENGTH / nativeLength;
@@ -240,15 +231,14 @@ export function Cybertruck() {
       : [widthScale, yScale, lengthScale];
     // Convert wheel world positions (in the scene's own local frame,
     // since scene has no parent at this point) into chassisRef's local
-    // frame by multiplying by the chassis scale. Y is dropped — jets
-    // sit at the chassis sill via jetGroupRef.position.y = -groundOffset,
-    // NOT at the wheel-center Y from the model.
+    // frame by multiplying each axis by the matching chassis scale.
     // Preserve the GLB's wheel centers exactly. The model is not
     // centered on local X=0, so forcing symmetry around the scene
     // origin shifts the jets away from the visible wheel wells.
     // These coordinates are also the terrain-sampling footprint.
-    const jetPositions: [number, number][] = wheelWorldPositions.map((wp) => [
+    const jetPositions: [number, number, number][] = wheelWorldPositions.map((wp) => [
       wp.x * scale[0],
+      wp.y * scale[1],
       wp.z * scale[2],
     ]);
     return { scene, scale, jetPositions };
@@ -474,7 +464,7 @@ export function Cybertruck() {
     const cHd = Math.cos(heading.current);
     const sHd = Math.sin(heading.current);
     let groundY = sampleMeshHeight(pos.current.x, pos.current.z);
-    for (const [jx, jz] of modelInfo.jetPositions) {
+    for (const [jx, , jz] of modelInfo.jetPositions) {
       const wx = pos.current.x + jx * cHd + jz * sHd;
       const wz = pos.current.z - jx * sHd + jz * cHd;
       const y = sampleMeshHeight(wx, wz);
@@ -495,17 +485,6 @@ export function Cybertruck() {
     vehicleState.z = pos.current.z;
     vehicleState.heading = heading.current;
 
-    // Repark the jet group just below the truck's underbelly. Using
-    // the full -groundOffset put emitters at the extreme lowest
-    // visible pixel of the whole model (a wheel-well corner or trim
-    // protrusion), leaving a visible gap between the main underbelly
-    // and the top of the flame column. Lifting by EMITTER_LIFT_FRAC
-    // parks the emitters close to where the wheel-well underbelly
-    // actually sits, so the core ball hugs the chassis body.
-    if (jetGroupRef.current) {
-      jetGroupRef.current.position.y = -groundOffset.current * EMITTER_LIFT_FRAC;
-    }
-
     // Sample slope at each of the 4 wheel contact points in world
     // space, average the resulting surface normals. Single-center
     // sampling snaps hard whenever the truck straddles a crater rim;
@@ -515,7 +494,7 @@ export function Cybertruck() {
     let nX = 0;
     let nY = 0;
     let nZ = 0;
-    for (const [jx, jz] of modelInfo.jetPositions) {
+    for (const [jx, , jz] of modelInfo.jetPositions) {
       const worldX = pos.current.x + jx * cosHd + jz * sinHd;
       const worldZ = pos.current.z - jx * sinHd + jz * cosHd;
       const { dx, dz } = sampleSlope(worldX, worldZ, SLOPE_SAMPLE_H);
@@ -647,16 +626,12 @@ export function Cybertruck() {
         <group scale={modelInfo.scale}>
           <primitive object={modelInfo.scene} />
         </group>
-        {/* Jet group: repositioned each frame to the chassis sill
-            (Y = -groundOffset) so nozzles emit from under the belly,
-            not from the truck's origin (which is above sill).
-            Per-emitter X/Z come from the original wheel-node
-            positions in the GLB — snapshotted before the wheels
-            were hidden — so flames sit exactly where the tires
-            used to be. */}
+        {/* Per-emitter X/Y/Z come from the original GLB wheel nodes,
+            snapshotted before the wheels were hidden, so each flame
+            begins at the actual center of its former tire. */}
         <group ref={jetGroupRef}>
-          {modelInfo.jetPositions.map(([x, z], i) => (
-            <group key={i} position={[x, 0, z]}>
+          {modelInfo.jetPositions.map(([x, y, z], i) => (
+            <group key={i} position={[x, y, z]}>
               <HoverJet
                 intensityRef={jetIntensityRef}
                 stretchY={JET_STRETCH_Y}
