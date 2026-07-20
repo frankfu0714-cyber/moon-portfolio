@@ -92,14 +92,10 @@ const HOVER_HEIGHT = 1.2;
 // still feels the same, just a smaller vertical excursion.
 const BOB_AMP = 0.06;
 const BOB_PERIOD = 1.5;
-// Vertical stretch on the HoverJet flame stack. Base cone length is
-// 0.52; stretched to 0.52 * 2.0 = 1.04 units, so with HOVER_HEIGHT
-// 0.9 the flame column starts near the underbelly and ends just past
-// the terrain (bottom 0.14 buried, mostly visible). Old 7.0 pushed
-// flames 3.5m into the ground — from a distance the flame BOTTOM
-// (touching terrain) read as the "truck bottom", making the whole
-// silhouette look like it was sitting on the ground.
-const JET_STRETCH_Y = 2.0;
+// Keep the truck flames compact around their wheel-well emitters.
+// Longer trails projected far away from the truck at low camera
+// angles and looked like four misplaced flames on the terrain.
+const JET_STRETCH_Y = 1.0;
 
 // Drive tuning — floatier than the ground version.
 const BASE_SPEED = 5.0;
@@ -198,14 +194,13 @@ export function Cybertruck() {
         mesh.receiveShadow = true;
         return;
       }
-      // Wheel NODES (not the mesh primitives inside them) — Sphere.001..004
-      // are direct children of RootNode. Snapshot their world position
-      // after scene.rotation.y = Math.PI is applied, so we get the
-      // POST-FLIP positions that align with how the model actually
-      // renders in the scene.
+      // Wheel groups (not the mesh primitives inside them) —
+      // Sphere.001..004 are direct children of RootNode. Use each
+      // wheel's visible geometry center rather than its authored pivot;
+      // the pivots are slightly off-center in this GLB.
       if (o.name.startsWith("Sphere")) {
         const wp = new THREE.Vector3();
-        o.getWorldPosition(wp);
+        new THREE.Box3().setFromObject(o).getCenter(wp);
         wheelWorldPositions.push(wp);
       }
     });
