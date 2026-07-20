@@ -52,13 +52,18 @@ function makeAtmosphereTexture() {
   const ctx = canvas.getContext("2d")!;
   const c = size / 2;
 
+  // Thin halo — only a sliver past the sphere silhouette. The
+  // sphere fills 0..0.575 of the canvas; keep the glow between
+  // 0.575 (limb) and 0.66 (short reach past the limb). Anything
+  // further out reads as a fake "second Earth" disc, which Frank
+  // circled in a screenshot.
   const atm = ctx.createRadialGradient(c, c, 0, c, c, c);
   atm.addColorStop(0.0, "rgba(120,170,240,0)");
-  atm.addColorStop(0.52, "rgba(120,170,240,0)");
-  atm.addColorStop(0.575, "rgba(150,195,255,0.32)");
-  atm.addColorStop(0.62, "rgba(120,170,240,0.18)");
-  atm.addColorStop(0.72, "rgba(100,150,225,0.08)");
-  atm.addColorStop(0.85, "rgba(90,140,215,0.03)");
+  atm.addColorStop(0.55, "rgba(120,170,240,0)");
+  atm.addColorStop(0.575, "rgba(150,195,255,0.28)");
+  atm.addColorStop(0.6, "rgba(120,170,240,0.12)");
+  atm.addColorStop(0.63, "rgba(100,150,225,0.04)");
+  atm.addColorStop(0.66, "rgba(90,140,215,0)");
   atm.addColorStop(1.0, "rgba(90,140,215,0)");
   ctx.fillStyle = atm;
   ctx.fillRect(0, 0, size, size);
