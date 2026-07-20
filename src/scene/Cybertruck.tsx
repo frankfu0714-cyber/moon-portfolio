@@ -79,16 +79,10 @@ const WIDTH_MULT = 0.75;
 // the "sometimes touches ground" pattern: on rolling terrain a ridge
 // under a rear wheel would poke up through the chassis while the
 // center sampled clear.
-// Runtime measurement (visible sill height above terrain) with the
-// astronaut GLB restored to 1.77 units tall:
-//   HOVER=1.1 -> sill at 1.15 (~65% of astronaut = chest)
-//   HOVER=0.9 -> sill at ~0.94 (~53% of astronaut = waist/belt)
-// 0.9 hits Frank's "waist" target directly. Paired with the
-// JET_STRETCH_Y reduction so the visible flame column ends near
-// the terrain instead of extending 3.5m underground (that long
-// tail was what read as "the truck is at ankle level" — flames
-// reached the ground so the whole silhouette scanned as low).
-const HOVER_HEIGHT = 1.175;
+// 1.25 adds a small safety margin over the previous 1.175 tuning.
+// The exact wheel coordinates below are also used for terrain
+// sampling, so the clearance follows the truck's real footprint.
+const HOVER_HEIGHT = 1.25;
 // The emitter jet group sits BELOW the chassis origin by this
 // fraction of the model's total min-Y extent. Using the full extent
 // (1.0) put emitters at the extreme lowest visible pixel — often a
@@ -98,13 +92,6 @@ const HOVER_HEIGHT = 1.175;
 // where the wheel-well underbelly actually sits, so the flame's
 // core ball hugs the truck.
 const EMITTER_LIFT_FRAC = 0.55;
-// Emitter positions come from the GLB's original wheel nodes (see
-// modelInfo.jetPositions). Real wheels sit at the outer edges of the
-// body — fine for wheels, but the hover thrusters read as too wide
-// when they project past the chassis silhouette. Pull each emitter's
-// X coordinate inward by this factor (Z unchanged so the wheelbase
-// front/back spacing stays intact).
-const EMITTER_INWARD_MULT = 0.75;
 // Bob amp 0.15 -> 0.06 per Frank's ask — the up/down range was too
 // big and made the parked truck read as bobbing on rough water
 // instead of just breathing in place. Period unchanged so the rhythm
@@ -256,34 +243,14 @@ export function Cybertruck() {
     // frame by multiplying by the chassis scale. Y is dropped — jets
     // sit at the chassis sill via jetGroupRef.position.y = -groundOffset,
     // NOT at the wheel-center Y from the model.
+    // Preserve the GLB's wheel centers exactly. The model is not
+    // centered on local X=0, so forcing symmetry around the scene
+    // origin shifts the jets away from the visible wheel wells.
+    // These coordinates are also the terrain-sampling footprint.
     const jetPositions: [number, number][] = wheelWorldPositions.map((wp) => [
-      wp.x * scale[0] * EMITTER_INWARD_MULT,
+      wp.x * scale[0],
       wp.z * scale[2],
     ]);
-    // Enforce X-mirror symmetry across the truck's centerline. The
-    // GLB's wheel nodes aren't perfectly mirrored, so the raw
-    // snapshot has the right-side pair slightly inboard of the left
-    // pair — visible as a lopsided flame rectangle from behind.
-    // Pair the 4 emitters by Z (front axle vs rear axle) and force
-    // each pair to x = ±max(|xL|, |xR|), z = average.
-    if (jetPositions.length === 4) {
-      const sorted = jetPositions.slice().sort((a, b) => a[1] - b[1]);
-      for (let i = 0; i < 2; i++) {
-        const pair = sorted.slice(i * 2, i * 2 + 2);
-        // Order by X so pair[0] is the left (smaller X), pair[1] the right.
-        if (pair[0][0] > pair[1][0]) {
-          const tmp = pair[0];
-          pair[0] = pair[1];
-          pair[1] = tmp;
-        }
-        const maxAbs = Math.max(Math.abs(pair[0][0]), Math.abs(pair[1][0]));
-        const avgZ = (pair[0][1] + pair[1][1]) / 2;
-        pair[0][0] = -maxAbs;
-        pair[1][0] = maxAbs;
-        pair[0][1] = avgZ;
-        pair[1][1] = avgZ;
-      }
-    }
     return { scene, scale, jetPositions };
   }, [gltf.scene]);
 
