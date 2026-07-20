@@ -52,19 +52,22 @@ function makeAtmosphereTexture() {
   const ctx = canvas.getContext("2d")!;
   const c = size / 2;
 
-  // Thin halo — only a sliver past the sphere silhouette. The
-  // sphere fills 0..0.575 of the canvas; keep the glow between
-  // 0.575 (limb) and 0.66 (short reach past the limb). Anything
-  // further out reads as a fake "second Earth" disc, which Frank
-  // circled in a screenshot.
+  // Thin halo — only a sliver past the sphere silhouette. Fades
+  // out over an EXTENDED tail so no visible outer edge/line. The
+  // previous stops died at 0.66 which produced a subtle circular
+  // edge (Frank circled it); this version fades smoothly through
+  // 0.78 so the transition into black space is imperceptible.
   const atm = ctx.createRadialGradient(c, c, 0, c, c, c);
   atm.addColorStop(0.0, "rgba(120,170,240,0)");
   atm.addColorStop(0.55, "rgba(120,170,240,0)");
-  atm.addColorStop(0.575, "rgba(150,195,255,0.28)");
-  atm.addColorStop(0.6, "rgba(120,170,240,0.12)");
-  atm.addColorStop(0.63, "rgba(100,150,225,0.04)");
-  atm.addColorStop(0.66, "rgba(90,140,215,0)");
-  atm.addColorStop(1.0, "rgba(90,140,215,0)");
+  atm.addColorStop(0.575, "rgba(150,195,255,0.22)");
+  atm.addColorStop(0.59, "rgba(140,190,250,0.14)");
+  atm.addColorStop(0.61, "rgba(120,175,235,0.08)");
+  atm.addColorStop(0.64, "rgba(105,160,220,0.04)");
+  atm.addColorStop(0.68, "rgba(95,150,215,0.015)");
+  atm.addColorStop(0.73, "rgba(90,145,210,0.005)");
+  atm.addColorStop(0.78, "rgba(90,140,210,0)");
+  atm.addColorStop(1.0, "rgba(90,140,210,0)");
   ctx.fillStyle = atm;
   ctx.fillRect(0, 0, size, size);
 
