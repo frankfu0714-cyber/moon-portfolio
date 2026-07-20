@@ -111,16 +111,18 @@ const EARTH_FRAGMENT = /* glsl */ `
     // Subtle Rayleigh-like atmospheric tint on the day side.
     color += vec3(0.06, 0.10, 0.16) * dayness;
 
-    // Fresnel-based atmospheric limb glow: subtle bright arc on the
-    // sunlit edge only. Reduced from the earlier 1.1x multiplier
-    // because we removed the separate halo sprite (which was
-    // creating a visible silhouette line where the sprite quad
-    // ended against space). This rim stays entirely within the
-    // sphere's shader so there's no external geometry edge to see.
+    // Fresnel-based atmospheric limb glow: subtle bright blue arc
+    // on the sunlit edge only. Restored from 0.55x back toward the
+    // original 1.1x — Frank asked for a visible atmospheric-scatter
+    // glow after the halo sprite came out. Kept the sharpened
+    // pow-3.6 falloff so the arc lives on the sphere silhouette
+    // and fades to zero right at the edge — no separate geometry
+    // means no visible outer edge line, just the Fresnel term
+    // dying naturally to 0 at the mesh boundary.
     float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.6);
     float sunAmount = clamp(sunFacing, 0.0, 1.0);
     vec3 atmoSun = vec3(0.55, 0.78, 1.15);
-    color += atmoSun * rim * sunAmount * 0.55;
+    color += atmoSun * rim * sunAmount * 0.95;
 
     gl_FragColor = vec4(color, 1.0);
   }
