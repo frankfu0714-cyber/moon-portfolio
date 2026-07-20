@@ -36,51 +36,98 @@ function MoonTextureApplier({
     const mat = materialRef.current;
     if (mat) {
       mat.map = colorMap;
-      // Reuse the color map as a bump map — cheap micro-relief that makes
-      // the regolith catch the low sun instead of reading as flat paint.
+      // Keep just a trace of the source as micro-relief. At the old 0.12
+      // strength its large maria shapes repeated in the lighting too; 0.035
+      // retains close-up regolith grain without rebuilding the distant grid.
       mat.bumpMap = colorMap;
-      mat.bumpScale = 0.12;
-      // Anti-tiling: the 44x repeat makes the texture's big dark blotches
-      // and track lines read as an obvious grid from any height. Patch the
-      // map lookup so every fragment blends two decorrelated samples (the
-      // second rotated + rescaled so its repeats never line up with the
-      // first) selected by a smooth low-frequency noise mask, then modulate
-      // brightness with an even lower-frequency noise. The repetition
-      // becomes statistically invisible while the close-up detail stays.
+      mat.bumpScale = 0.035;
+      // Anti-tiling: color.jpg is a full 2:1 Moon map, not a tileable ground
+      // texture. Its one large dark maria region therefore becomes an
+      // unmistakable row/column pattern when repeated 44x. Randomize the
+      // source phase independently in every UV cell and smoothly blend the
+      // four neighbouring cells. Broad color variation comes from warped
+      // FBM rather than from repeated landmarks in the photo; the photo is
+      // retained mainly for its convincing close-up crater detail.
       mat.onBeforeCompile = (shader) => {
         shader.fragmentShader = shader.fragmentShader
           .replace(
             "#include <common>",
             `#include <common>
-            float mpHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+            float mpHash(vec2 p){
+              vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+              p3 += dot(p3, p3.yzx + 33.33);
+              return fract((p3.x + p3.y) * p3.z);
+            }
+            vec2 mpHash2(vec2 p){
+              vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+              p3 += dot(p3, p3.yzx + 33.33);
+              return fract((p3.xx + p3.yz) * p3.zy);
+            }
             float mpNoise(vec2 p){
               vec2 i = floor(p); vec2 f = fract(p);
               vec2 u = f * f * (3.0 - 2.0 * f);
               return mix(mix(mpHash(i), mpHash(i + vec2(1.0, 0.0)), u.x),
                          mix(mpHash(i + vec2(0.0, 1.0)), mpHash(i + vec2(1.0, 1.0)), u.x), u.y);
+            }
+            float mpFbm(vec2 p){
+              float value = 0.0;
+              float amplitude = 0.5;
+              mat2 octaveTurn = mat2(1.62, -1.17, 1.17, 1.62);
+              for(int i = 0; i < 4; i++){
+                value += amplitude * mpNoise(p);
+                p = octaveTurn * p + vec2(7.13, 3.71);
+                amplitude *= 0.5;
+              }
+              return value / 0.9375;
+            }
+            vec4 mpSampleNoTile(sampler2D tex, vec2 uv){
+              vec2 cell = floor(uv);
+              vec2 f = fract(uv);
+              // Keep most of each cell crisp and confine cross-fading to a
+              // narrow band. A full-cell Hermite blend hid the grid but also
+              // averaged away too much of the source's crater detail.
+              vec2 blend = smoothstep(vec2(0.34), vec2(0.66), f);
+              vec2 o00 = mpHash2(cell) * 2.0;
+              vec2 o10 = mpHash2(cell + vec2(1.0, 0.0)) * 2.0;
+              vec2 o01 = mpHash2(cell + vec2(0.0, 1.0)) * 2.0;
+              vec2 o11 = mpHash2(cell + vec2(1.0, 1.0)) * 2.0;
+              vec4 row0 = mix(texture2D(tex, uv + o00),
+                              texture2D(tex, uv + o10), blend.x);
+              vec4 row1 = mix(texture2D(tex, uv + o01),
+                              texture2D(tex, uv + o11), blend.x);
+              return mix(row0, row1, blend.y);
             }`,
           )
           .replace(
             "#include <map_fragment>",
             `#ifdef USE_MAP
-              vec2 mpUv2 = mat2(0.4081, -0.9129, 0.9129, 0.4081) * (vMapUv * 0.3714) + vec2(19.19, 7.33);
-              vec2 mpUv3 = mat2(-0.7373, 0.6755, -0.6755, -0.7373) * (vMapUv * 0.6151) + vec2(5.71, 23.13);
-              vec4 mpA = texture2D(map, vMapUv);
-              vec4 mpB = texture2D(map, mpUv2);
-              vec4 mpC = texture2D(map, mpUv3);
-              float mpM1 = smoothstep(0.32, 0.68, mpNoise(vMapUv * 0.53));
-              float mpM2 = smoothstep(0.32, 0.68, mpNoise(vMapUv * 0.29 + 11.3));
-              vec4 sampledDiffuseColor = mix(mix(mpA, mpB, mpM1), mpC, mpM2 * 0.65);
-              float mpLum = dot(sampledDiffuseColor.rgb, vec3(0.3333));
-              sampledDiffuseColor.rgb = mix(vec3(mpLum), sampledDiffuseColor.rgb, 0.72);
-              float mpVar = mpNoise(vMapUv * 0.043 + 31.7);
-              float mpVar2 = mpNoise(vMapUv * 0.11 + 3.9);
-              sampledDiffuseColor.rgb *= (0.90 + 0.20 * mpVar) * (0.95 + 0.10 * mpVar2);
+              vec4 sampledDiffuseColor = mpSampleNoTile(map, vMapUv);
+              float mpPhotoLum = dot(sampledDiffuseColor.rgb, vec3(0.3333));
+              vec3 mpChroma = sampledDiffuseColor.rgb / max(mpPhotoLum, 0.08);
+
+              // Domain-warped FBM supplies non-periodic maria/regolith
+              // variation at two scales. It is evaluated in continuous UV
+              // space, so there is no privileged horizontal or vertical
+              // direction and no repeating grid to spot from above.
+              vec2 mpWarp = vec2(
+                mpFbm(vMapUv * 0.035 + vec2(17.3, 4.1)),
+                mpFbm(vMapUv * 0.035 + vec2(-8.7, 21.6))
+              ) - 0.5;
+              float mpMacro = mpFbm(vMapUv * 0.055 + mpWarp * 1.8);
+              float mpMeso = mpFbm(vMapUv * 0.19 - mpWarp * 0.65 + vec2(9.2, -5.4));
+
+              // Compress the photo's large landmark contrast but retain its
+              // fine crater texture, then restore natural broad variation
+              // with the non-repeating procedural field above.
+              float mpPhotoDetail = 0.72 + (mpPhotoLum - 0.5) * 0.55;
+              float mpNaturalShade = 0.86 + (mpMacro - 0.5) * 0.34
+                                           + (mpMeso - 0.5) * 0.10;
+              sampledDiffuseColor.rgb = mpChroma * mpPhotoDetail * mpNaturalShade;
               diffuseColor *= sampledDiffuseColor;
             #endif`,
           );
       };
-      mat.customProgramCacheKey = () => "moon-antitile2";
+      mat.customProgramCacheKey = () => "moon-stochastic-antitile-v3";
       mat.needsUpdate = true;
     }
   }, [colorMap, materialRef]);
