@@ -390,32 +390,24 @@ function Rocket() {
       <mesh material={frame} position={[dX * 2.07 + doorLatX * 0.32, doorY - 0.1, dZ * 2.07 + doorLatZ * 0.32]} rotation={[0, doorRy, 0]}>
         <boxGeometry args={[0.07, 0.4, 0.07]} />
       </mesh>
-      {/* Button pillar beside the hatch: black post with an amber status
-          lamp on top and a glowing green entry button at hand height,
-          standing just outside the handrail. */}
+      {/* Tiny button panel ON the hatch door itself: a small dark plate
+          with an amber status lamp above a green entry button, sitting
+          opposite the handle at hand height. */}
       <group
-        position={[
-          dX * 2.3 + doorLatX * 1.05,
-          padTop,
-          dZ * 2.3 + doorLatZ * 1.05,
-        ]}
+        position={[dX * 2.06 + doorLatX * -0.3, doorY - 0.05, dZ * 2.06 + doorLatZ * -0.3]}
         rotation={[0, doorRy, 0]}
       >
-        {/* Post */}
-        <mesh material={black} position={[0, 1.0, 0]} castShadow>
-          <boxGeometry args={[0.2, 2.0, 0.16]} />
+        {/* Backing plate */}
+        <mesh material={black} position={[0, 0, 0]}>
+          <boxGeometry args={[0.16, 0.34, 0.03]} />
         </mesh>
         {/* Amber status lamp (top) */}
-        <mesh material={amberLamp} position={[0, 1.62, 0.09]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.11, 0.11, 0.06, 16]} />
+        <mesh material={amberLamp} position={[0, 0.08, 0.025]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.045, 0.045, 0.03, 12]} />
         </mesh>
-        {/* Green entry button (hand height, slightly proud) */}
-        <mesh material={greenLamp} position={[0, 1.22, 0.1]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.13, 0.13, 0.08, 16]} />
-        </mesh>
-        {/* Soft green ring glow behind the button */}
-        <mesh material={greenLamp} position={[0, 1.22, 0.075]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.16, 0.16, 0.02, 16]} />
+        {/* Green entry button (below) */}
+        <mesh material={greenLamp} position={[0, -0.08, 0.028]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.055, 0.055, 0.035, 12]} />
         </mesh>
       </group>
       {/* Glowing entry light above the hatch */}
