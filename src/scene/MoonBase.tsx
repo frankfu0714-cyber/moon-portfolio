@@ -386,15 +386,16 @@ function Rocket() {
           <cylinderGeometry args={[0.16, 0.16, 0.08, 16]} />
         </mesh>
       </group>
-      {/* Door seam handle */}
-      <mesh material={frame} position={[dX * 2.07 + doorLatX * 0.32, doorY - 0.1, dZ * 2.07 + doorLatZ * 0.32]} rotation={[0, doorRy, 0]}>
+      {/* Door seam handle (right side, viewed from outside) */}
+      <mesh material={frame} position={[dX * 2.07 + doorLatX * -0.32, doorY - 0.1, dZ * 2.07 + doorLatZ * -0.32]} rotation={[0, doorRy, 0]}>
         <boxGeometry args={[0.07, 0.4, 0.07]} />
       </mesh>
       {/* Tiny button panel ON the hatch door itself: a small dark plate
-          with an amber status lamp above a green entry button, sitting
-          opposite the handle at hand height. */}
+          with an amber status lamp above a green entry button, on the
+          LEFT side of the door (viewed from outside), opposite the
+          handle, at hand height. */}
       <group
-        position={[dX * 2.06 + doorLatX * -0.3, doorY - 0.05, dZ * 2.06 + doorLatZ * -0.3]}
+        position={[dX * 2.06 + doorLatX * 0.3, doorY - 0.05, dZ * 2.06 + doorLatZ * 0.3]}
         rotation={[0, doorRy, 0]}
       >
         {/* Backing plate */}
