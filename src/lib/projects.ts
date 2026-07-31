@@ -10,8 +10,8 @@ export type Project = {
 // Synced from https://goldotakutw.com/apps
 export const PROJECTS: Project[] = [
   {
-    name: "Moon Portfolio",
-    nameZh: "月球",
+    name: "Moonwalk",
+    nameZh: "月步",
     tagline: "This site — a walkable moon-surface portfolio. You're in it.",
     platform: "Web",
     href: "/",

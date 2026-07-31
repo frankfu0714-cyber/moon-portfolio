@@ -153,7 +153,7 @@ export function HUD() {
           Frank Fu
         </div>
         <div className="text-[9px] uppercase tracking-[0.35em] opacity-30 mt-1.5">
-          GOLDOTAKU · 金宅 — Moon Portfolio
+          GOLDOTAKU · 金宅 — Moonwalk 月步
         </div>
       </div>
 
