@@ -61,16 +61,17 @@ const black = new THREE.MeshStandardMaterial({
   metalness: 0.4,
   roughness: 0.5,
 });
-// Door button-panel lights (amber status lamp + green entry button).
+// Door button-panel lights: deep-orange status lamp on top, brighter
+// warm-yellow entry button below (matches the reference render).
 const amberLamp = new THREE.MeshStandardMaterial({
-  color: "#ffb520",
-  emissive: "#ffa216",
-  emissiveIntensity: 2.0,
+  color: "#f79b18",
+  emissive: "#ef8c0e",
+  emissiveIntensity: 1.8,
   toneMapped: false,
 });
-const greenLamp = new THREE.MeshStandardMaterial({
-  color: "#4dff7a",
-  emissive: "#2bf05e",
+const yellowLamp = new THREE.MeshStandardMaterial({
+  color: "#ffd23a",
+  emissive: "#ffc61e",
   emissiveIntensity: 2.2,
   toneMapped: false,
 });
@@ -391,7 +392,7 @@ function Rocket() {
         <boxGeometry args={[0.07, 0.4, 0.07]} />
       </mesh>
       {/* Tiny button panel ON the hatch door itself: a small dark plate
-          with an amber status lamp above a green entry button, on the
+          with an orange status lamp above a yellow entry button, on the
           LEFT side of the door (viewed from outside), opposite the
           handle, at hand height. */}
       <group
@@ -406,8 +407,8 @@ function Rocket() {
         <mesh material={amberLamp} position={[0, 0.08, 0.025]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.045, 0.045, 0.03, 12]} />
         </mesh>
-        {/* Green entry button (below) */}
-        <mesh material={greenLamp} position={[0, -0.08, 0.028]} rotation={[Math.PI / 2, 0, 0]}>
+        {/* Yellow entry button (below, brighter) */}
+        <mesh material={yellowLamp} position={[0, -0.08, 0.028]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.055, 0.055, 0.035, 12]} />
         </mesh>
       </group>
