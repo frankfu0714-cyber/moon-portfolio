@@ -36,7 +36,7 @@ function ModeButton({
       type="button"
       whileTap={{ scale: 0.92 }}
       onClick={onClick}
-      className={`rounded-full border backdrop-blur px-2 py-1 text-[10px] sm:px-3 sm:py-2 sm:text-xs transition font-mono ${
+      className={`rounded-full border backdrop-blur px-2 py-1 text-[10px] sm:px-3 sm:py-2 sm:text-xs transition font-mono select-none ${
         on
           ? "border-sky-300/60 bg-sky-400/15 text-sky-100 opacity-100"
           : "border-white/15 bg-black/40 opacity-80 hover:opacity-100"
@@ -160,7 +160,7 @@ export function HUD() {
       {/* Top-right controls: missions / roam / float / sound.
           On mobile they sit BELOW the title (top-14) and wrap right-aligned
           so they never collide with the top-left name. */}
-      <div className="fixed top-14 right-3 z-30 flex flex-wrap justify-end gap-1.5 max-w-[75vw] opacity-70 hover:opacity-100 transition-opacity sm:top-4 sm:right-4 sm:gap-2 sm:max-w-none">
+      <div className="fixed top-14 right-3 z-30 flex flex-wrap justify-end gap-1.5 max-w-[75vw] select-none opacity-70 hover:opacity-100 transition-opacity sm:top-4 sm:right-4 sm:gap-2 sm:max-w-none">
         <MissionProgress />
         <ModeButton label="ROAM" on={autoRoam} onClick={toggleAutoRoam} />
         <ModeButton label="FLOAT" on={floatMode} onClick={toggleFloatMode} />

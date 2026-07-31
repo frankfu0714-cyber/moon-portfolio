@@ -241,7 +241,7 @@ export function MuteButton() {
       whileTap={{ scale: 0.92 }}
       onClick={toggleMute}
       aria-label={muted ? "Play ambient music" : "Mute ambient music"}
-      className="rounded-full border border-white/15 bg-black/40 backdrop-blur px-2 py-1 text-[10px] sm:px-3 sm:py-2 sm:text-xs opacity-80 hover:opacity-100 transition font-mono"
+      className="rounded-full border border-white/15 bg-black/40 backdrop-blur px-2 py-1 text-[10px] sm:px-3 sm:py-2 sm:text-xs opacity-80 hover:opacity-100 transition font-mono select-none"
     >
       {muted ? "SOUND · OFF" : "SOUND · ON"}
     </motion.button>
