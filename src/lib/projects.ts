@@ -10,6 +10,22 @@ export type Project = {
 // Synced from https://goldotakutw.com/apps
 export const PROJECTS: Project[] = [
   {
+    name: "Moon Portfolio",
+    nameZh: "月球",
+    tagline: "This site — a walkable moon-surface portfolio. You're in it.",
+    platform: "Web",
+    href: "/",
+    accent: "#e2e6ea",
+  },
+  {
+    name: "Goldotaku",
+    nameZh: "金宅",
+    tagline: "Personal site — blog, market indices, MBA journey & more.",
+    platform: "Web",
+    href: "https://goldotakutw.com/",
+    accent: "#ffd580",
+  },
+  {
     name: "Voice Typer",
     tagline: "Speech-to-text for Windows — speak, words appear. Works offline.",
     platform: "Windows",
