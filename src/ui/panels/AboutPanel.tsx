@@ -5,7 +5,7 @@ export function AboutPanel() {
     <div className="space-y-5 text-[15px] leading-relaxed opacity-90">
       <p>
         <span className="text-white">Frank Fu</span> ·{" "}
-        <span className="opacity-70">GOLDOTAKU / 宅</span>
+        <span className="opacity-70">GOLDOTAKU / 金宅</span>
       </p>
       <p>
         Build-in-public indie hacker from Taiwan. Currently on a self-imposed
@@ -13,7 +13,7 @@ export function AboutPanel() {
         Ship small, ship often, keep learning in front of everyone.
       </p>
       <p className="opacity-80">
-        我是宅，一個在台灣的 indie hacker，正在挑戰 100 天做 20 支 App。
+        我是金宅，一個在台灣的 indie hacker，正在挑戰 100 天做 20 支 App。
         每一支都邊做邊發，把過程留在網路上。
       </p>
       <p className="opacity-80">

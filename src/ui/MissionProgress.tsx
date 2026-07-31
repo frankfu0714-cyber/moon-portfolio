@@ -48,7 +48,7 @@ export function MissionProgress() {
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className={`rounded-full border backdrop-blur px-3 py-2 text-xs font-mono transition ${
+        className={`rounded-full border backdrop-blur px-2 py-1 text-[10px] sm:px-3 sm:py-2 sm:text-xs font-mono transition ${
           complete
             ? "border-emerald-300/60 bg-emerald-400/15 text-emerald-100 opacity-100"
             : "border-white/15 bg-black/40 opacity-80 hover:opacity-100"

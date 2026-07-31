@@ -13,11 +13,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Frank Fu (GOLDOTAKU / 宅) — Moon Portfolio",
+  title: "Frank Fu (GOLDOTAKU / 金宅) — Moon Portfolio",
   description:
     "A chill, walkable moon-surface portfolio for GOLDOTAKU. 100 days, 20 apps. Build-in-public from Taiwan.",
   openGraph: {
-    title: "Frank Fu (GOLDOTAKU / 宅) — Moon Portfolio",
+    title: "Frank Fu (GOLDOTAKU / 金宅) — Moon Portfolio",
     description:
       "A chill, walkable moon-surface portfolio for GOLDOTAKU. 100 days, 20 apps. Build-in-public from Taiwan.",
     type: "website",

@@ -315,6 +315,31 @@ export function AstronautController() {
       velocity.current.set(0, 0, 0);
       vy.current = 0;
       airborne.current = false;
+      // Keep the view continuous with the truck's chase cam. While
+      // driving, the truck writes camera.position directly and our
+      // camPos/camTarget smoothing state goes stale at wherever the
+      // player BOARDED — restoring it here used to snap the view back
+      // across the map. Instead, adopt the live camera transform as
+      // the walk-cam state and derive matching orbit yaw/pitch/dist,
+      // so the camera simply stays where the player got out.
+      camPos.current.copy(camera.position);
+      const pivotYNow = astronaut.position.y + 1.4;
+      const cdx = newX - camera.position.x;
+      const cdz = newZ - camera.position.z;
+      orbitYaw.current = Math.atan2(cdx, cdz);
+      const camDist = Math.hypot(
+        Math.hypot(cdx, cdz),
+        camera.position.y - pivotYNow,
+      );
+      orbitDist.current = THREE.MathUtils.clamp(camDist, 2.4, 22);
+      orbitPitch.current = THREE.MathUtils.clamp(
+        Math.asin(
+          (camera.position.y - pivotYNow) / Math.max(camDist, 1e-3),
+        ),
+        -0.45,
+        1.15,
+      );
+      camTarget.current.set(newX, pivotYNow, newZ);
       wasDriving.current = false;
     }
     astronaut.visible = true;

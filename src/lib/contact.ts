@@ -4,27 +4,31 @@ export type ContactLink = {
   href: string;
 };
 
-// Handles are best-effort — Frank to confirm/correct.
 export const CONTACT_LINKS: ContactLink[] = [
   {
     label: "Email",
-    handle: "frankfu0714@gmail.com",
-    href: "mailto:frankfu0714@gmail.com",
+    handle: "goldotakutw@gmail.com",
+    href: "mailto:goldotakutw@gmail.com",
+  },
+  {
+    label: "Website",
+    handle: "goldotakutw.com",
+    href: "https://goldotakutw.com/",
   },
   {
     label: "X",
-    handle: "@goldotaku",
-    href: "https://x.com/goldotaku",
+    handle: "@goldotakutw",
+    href: "https://x.com/goldotakutw",
   },
   {
     label: "Threads",
-    handle: "@goldotaku",
-    href: "https://threads.net/@goldotaku",
+    handle: "@goldotaku_tw",
+    href: "https://www.threads.net/@goldotaku_tw",
   },
   {
     label: "LinkedIn",
-    handle: "Frank Fu",
-    href: "https://www.linkedin.com/in/frank-fu/",
+    handle: "in/goldotaku",
+    href: "https://www.linkedin.com/in/goldotaku",
   },
   {
     label: "GitHub",

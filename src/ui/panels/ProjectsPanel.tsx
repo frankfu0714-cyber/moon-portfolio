@@ -46,7 +46,7 @@ export function ProjectsPanel() {
         ))}
       </ul>
       <p className="text-xs opacity-50 pt-2">
-        Real project links coming soon — most are placeholders while I wire the URLs.
+        Full list with details at goldotakutw.com/apps.
       </p>
     </div>
   );

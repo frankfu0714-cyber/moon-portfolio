@@ -28,7 +28,7 @@ export function ContactPanel() {
         ))}
       </ul>
       <p className="text-xs opacity-50 pt-2">
-        Some handles are best-guesses — will correct after Frank confirms.
+        More apps &amp; writing at goldotakutw.com.
       </p>
     </div>
   );

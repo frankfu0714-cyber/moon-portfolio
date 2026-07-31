@@ -11,7 +11,7 @@ import {
   selectVisitedCount,
   TOTAL_MISSIONS,
 } from "@/lib/missionStore";
-import { DPad } from "./DPad";
+import { Joystick } from "./Joystick";
 import { InteractHint } from "./InteractHint";
 import { MuteButton } from "./MuteButton";
 import { MissionProgress } from "./MissionProgress";
@@ -36,7 +36,7 @@ function ModeButton({
       type="button"
       whileTap={{ scale: 0.92 }}
       onClick={onClick}
-      className={`rounded-full border backdrop-blur px-3 py-2 text-xs transition font-mono ${
+      className={`rounded-full border backdrop-blur px-2 py-1 text-[10px] sm:px-3 sm:py-2 sm:text-xs transition font-mono ${
         on
           ? "border-sky-300/60 bg-sky-400/15 text-sky-100 opacity-100"
           : "border-white/15 bg-black/40 opacity-80 hover:opacity-100"
@@ -153,12 +153,14 @@ export function HUD() {
           Frank Fu
         </div>
         <div className="text-[9px] uppercase tracking-[0.35em] opacity-30 mt-1.5">
-          GOLDOTAKU · 宅 — Moon Portfolio
+          GOLDOTAKU · 金宅 — Moon Portfolio
         </div>
       </div>
 
-      {/* Top-right controls: missions / roam / float / sound */}
-      <div className="fixed top-4 right-4 z-30 flex gap-2 opacity-70 hover:opacity-100 transition-opacity">
+      {/* Top-right controls: missions / roam / float / sound.
+          On mobile they sit BELOW the title (top-14) and wrap right-aligned
+          so they never collide with the top-left name. */}
+      <div className="fixed top-14 right-3 z-30 flex flex-wrap justify-end gap-1.5 max-w-[75vw] opacity-70 hover:opacity-100 transition-opacity sm:top-4 sm:right-4 sm:gap-2 sm:max-w-none">
         <MissionProgress />
         <ModeButton label="ROAM" on={autoRoam} onClick={toggleAutoRoam} />
         <ModeButton label="FLOAT" on={floatMode} onClick={toggleFloatMode} />
@@ -196,9 +198,9 @@ export function HUD() {
       {/* Rocket reward video + completion toast */}
       <RocketRewardOverlay />
 
-      {/* Mobile d-pad */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 sm:hidden">
-        <AnimatePresence>{!activePanel && <DPad />}</AnimatePresence>
+      {/* Mobile joystick — drag to walk, push to the edge to run */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-30 sm:hidden">
+        <AnimatePresence>{!anyModalOpen && <Joystick />}</AnimatePresence>
       </div>
 
       {/* Asset credits — bottom right, near-invisible until hovered */}
