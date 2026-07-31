@@ -88,9 +88,13 @@ export const SOLID_CIRCLES: SolidCircle[] = [
   { x: -22.79, z: 19.02, r: 1.5 },
   // Rocket body only — the pad is walkable so you can stroll up to the hatch.
   { x: 34, z: -20, r: 2.6 },
-  // Neon lattice tower at (-12, -36): truss core plus a ring of circles
-  // tracing the perimeter fence, with a gap at the front gate (+Z side).
-  { x: -12, z: -36, r: 3.1 },
+  // Neon lattice tower at (-12, -36): the compound is walkable — you can
+  // stroll in through the front gate and stand under the truss. Only the
+  // four corner legs (base half-width 2.1) are solid.
+  { x: -9.9, z: -33.9, r: 0.8 },
+  { x: -9.9, z: -38.1, r: 0.8 },
+  { x: -14.1, z: -38.1, r: 0.8 },
+  { x: -14.1, z: -33.9, r: 0.8 },
   // Fence back (z = -42).
   { x: -16.5, z: -42, r: 1.6 },
   { x: -13.5, z: -42, r: 1.6 },
@@ -106,11 +110,15 @@ export const SOLID_CIRCLES: SolidCircle[] = [
   { x: -6, z: -37.5, r: 1.6 },
   { x: -6, z: -34.5, r: 1.6 },
   { x: -6, z: -31.5, r: 1.6 },
-  // Fence front (z = -30). The gate is sealed: a third circle plugs the
-  // old |x + 12| < 1.3 opening so the tower compound is unapproachable.
-  { x: -15.65, z: -30, r: 2.35 },
-  { x: -12, z: -30, r: 2.35 },
-  { x: -8.35, z: -30, r: 2.35 },
+  // Fence front (z = -30). Smaller circles trace the two panels and leave
+  // the visual gate opening (|x + 12| < 1.3, matching GATE_HW in
+  // MoonBase.tsx) open so you can walk into the compound.
+  { x: -17.3, z: -30, r: 1.0 },
+  { x: -15.7, z: -30, r: 1.0 },
+  { x: -14.3, z: -30, r: 1.0 },
+  { x: -9.7, z: -30, r: 1.0 },
+  { x: -8.2, z: -30, r: 1.0 },
+  { x: -6.7, z: -30, r: 1.0 },
   // Vertical solar-sail farm — one circle per mast, generated from
   // the shared SAIL_POSITIONS constant in MoonBase.tsx so shifting a
   // sail in one place can't leave a stale invisible collider behind.
