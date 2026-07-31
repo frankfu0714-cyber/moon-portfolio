@@ -209,6 +209,15 @@ class AmbientMusic {
 
 const music = typeof window !== "undefined" ? new AmbientMusic() : null;
 
+// The rocket reward video ducks the ambient BGM: stop it while the video
+// plays, restore it afterwards (respecting the user's SOUND setting).
+export function pauseAmbientForVideo() {
+  music?.stop();
+}
+export function resumeAmbientAfterVideo(userMuted: boolean) {
+  if (!userMuted) music?.start();
+}
+
 export function MuteButton() {
   const muted = useSceneStore((s) => s.muted);
   const toggleMute = useSceneStore((s) => s.toggleMute);

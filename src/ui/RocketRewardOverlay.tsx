@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useSceneStore } from "@/lib/store";
+import { pauseAmbientForVideo, resumeAmbientAfterVideo } from "./MuteButton";
 
 // Video reward that plays when the player has completed every mission
 // and interacts with the rocket. File is expected at
@@ -18,21 +19,53 @@ export function RocketRewardOverlay() {
   const showing = useSceneStore((s) => s.showingRocketReward);
   const hide = useSceneStore((s) => s.hideRocketReward);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [muted, setMuted] = useState(true);
+  // Video sound is ON by default; the ambient BGM is ducked while the
+  // overlay is showing, so the two never talk over each other.
+  const [muted, setMuted] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [showSkip, setShowSkip] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
   // Reveal the skip button after SKIP_DELAY_MS while the overlay is
   // visible. Reset on close so a re-open starts the timer over.
+  // Also ducks the game music while the video plays and restores it
+  // (respecting the user's SOUND pill) when the overlay closes.
   useEffect(() => {
     if (!showing) {
       setShowSkip(false);
-      setMuted(true);
+      setMuted(false);
+      setPaused(false);
       return;
     }
+    pauseAmbientForVideo();
     const t = window.setTimeout(() => setShowSkip(true), SKIP_DELAY_MS);
-    return () => window.clearTimeout(t);
+    return () => {
+      window.clearTimeout(t);
+      resumeAmbientAfterVideo(useSceneStore.getState().muted);
+    };
   }, [showing]);
+
+  // Kick off playback with sound. Opening the overlay always follows a
+  // user gesture (E key / tap), so sound-on autoplay is normally allowed —
+  // but if the browser refuses anyway, fall back to muted playback.
+  useEffect(() => {
+    if (!showing) return;
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = false;
+    v.play().catch(() => {
+      setMuted(true);
+      v.muted = true;
+      void v.play();
+    });
+  }, [showing]);
+
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) void v.play();
+    else v.pause();
+  };
 
   const dismiss = () => {
     hide();
@@ -64,9 +97,27 @@ export function RocketRewardOverlay() {
                 muted={muted}
                 playsInline
                 onEnded={dismiss}
-                className="w-full h-full bg-black object-contain"
+                onPlay={() => setPaused(false)}
+                onPause={() => setPaused(true)}
+                onClick={togglePlay}
+                className="w-full h-full bg-black object-contain cursor-pointer"
               />
+              {/* Big center ▶ while paused — tap anywhere on the video to resume */}
+              {paused && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="rounded-full border border-white/25 bg-black/55 backdrop-blur w-16 h-16 flex items-center justify-center text-2xl">
+                    ▶
+                  </div>
+                </div>
+              )}
               <div className="absolute top-3 left-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={togglePlay}
+                  className="rounded-full border border-white/20 bg-black/50 backdrop-blur px-3 py-1.5 text-xs font-mono opacity-80 hover:opacity-100 transition"
+                >
+                  {paused ? "▶ play" : "⏸ pause"}
+                </button>
                 <button
                   type="button"
                   onClick={() => setMuted((m) => !m)}
