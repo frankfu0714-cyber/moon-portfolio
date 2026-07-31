@@ -16,6 +16,11 @@ export const CONTACT_LINKS: ContactLink[] = [
     href: "https://goldotakutw.com/",
   },
   {
+    label: "YouTube",
+    handle: "Goldotaku 金宅",
+    href: "https://www.youtube.com/@goldotaku403",
+  },
+  {
     label: "X",
     handle: "@goldotakutw",
     href: "https://x.com/goldotakutw",
